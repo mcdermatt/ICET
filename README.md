@@ -25,7 +25,7 @@ roscore
 ```
 Uncomment the chunk of code in lines 86-130 of the fake_lidar node that corresponds to the the desired filetype of your point cloud data.
 
-Rename 'fn1' to match your point clouds files.
+Rename 'fn1' to point towards your local point cloud directory.
 
 Open a new terminal and run the launch file
 ```
@@ -37,7 +37,7 @@ HD Maps are published as PointCloud2 messages in the "/hd_map" topic which can b
 
 A "snail trail" showing the trajectory of the vehicle is also published as a PointCloud2 message "/snail_trail"
 
-Estimated transforms between frames and the associated covarince estimates output by ICET are published to /relative_transform and  /relative_covariance respectively 
+Estimated transforms between frames and the associated covarince estimates output by ICET are published to "/relative_transform" and  "/relative_covariance" respectively 
 
 ## Cite ICET
 
