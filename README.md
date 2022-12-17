@@ -33,9 +33,9 @@ source ~/catkin_ws/devel/setup.bash
 roslaunch ICET simple_mapping.launch
 ```
 
-HD Maps are published as PointCloud2 messages in the /hd_map topic which can be viewed via RViz
+HD Maps are published as PointCloud2 messages in the "/hd_map" topic which can be viewed via RViz
 
-A "snail trail" showing the trajectory of the vehicle is also published as a PointCloud2 message as /snail_trail
+A "snail trail" showing the trajectory of the vehicle is also published as a PointCloud2 message "/snail_trail"
 
 Estimated transforms between frames and the associated covarince estimates output by ICET are published to /relative_transform and  /relative_covariance respectively 
 
