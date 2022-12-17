@@ -1,0 +1,7 @@
+digraph G {
+"map" -> "child_tf_frame"[label="Broadcaster: /scan_matcher_node1\nAverage rate: 1.242 Hz\nMost recent transform: 1670898620.764 ( 0.374 sec old)\nBuffer length: 4.025 sec\n"];
+edge [style=invis];
+ subgraph cluster_legend { style=bold; color=black; label ="view_frames Result";
+"Recorded at time: 1670898621.139"[ shape=plaintext ] ;
+ }->"map";
+}

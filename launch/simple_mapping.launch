@@ -1,0 +1,14 @@
+<launch>
+	
+	<node pkg='ICET' type="fake_lidar.py" name="fake_lidar_node" />
+
+	<node pkg='ICET' type="scan_matcher.py" name="scan_matcher_node1" />
+
+	<node pkg='ICET' type="mapmaker.py" name="map_maker" />
+
+	<!--
+	<node pkg="tf2_ros" type="static_transform_publisher" name="link1_broadcaster" args="1 0 0 0 0 0 1 link1_parent link1" />
+	-->
+
+</launch>
+
