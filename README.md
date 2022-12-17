@@ -4,8 +4,6 @@ This repository contains code for our Iterative Closest Ellipsoidal Transform (I
 
 ![](https://github.com/mcdermatt/ICET/blob/main/demo1.gif)
 
-![](https://github.com/mcdermatt/ICET/blob/main/demo2.gif)
-
 ## Compile
 
 Use the following commands to download and compile ICET
@@ -81,3 +79,5 @@ Thank you for citing our work if you have used any of our code:
   year={2022}
 }
 ```
+![](https://github.com/mcdermatt/ICET/blob/main/demo2.gif)
+
