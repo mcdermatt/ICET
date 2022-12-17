@@ -1,5 +1,9 @@
 # ICET
 
+This repository contains code for our Iterative Closest Ellipsoidal Transform (ICET) point cloud registration algorithm. Code is structured in a ROS package to demonstrate real-time HD Map generation. Also included is jupyter notebook with inline 3D visualization to demonstrate using our algorithm without needing to set up a ROS enviornment. 
+
+## Real-time HD Map generation in RViz
+
 ![](https://github.com/mcdermatt/ICET/blob/main/demo1.gif)
 
 https://github.com/mcdermatt/ASAR/tree/main/v3
@@ -9,7 +13,7 @@ https://github.com/mcdermatt/ASAR/tree/main/v3
 
 Thank you for citing our work if you use any of this code: 
 
-[Mitigating Shadows in LIDAR Scan Matching Using Sphierical Voxels](https://ieeexplore.ieee.org/stamp/stamp.jsp?arnumber=9928328) 
+[Mitigating Shadows in LIDAR Scan Matching Using Spherical Voxels](https://ieeexplore.ieee.org/stamp/stamp.jsp?arnumber=9928328) 
 ```
 @ARTICLE{SphericalICET,
   author={McDermott, Matthew and Rife, Jason},
