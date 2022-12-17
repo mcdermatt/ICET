@@ -1,17 +1,26 @@
 # ICET
 
-This repository contains code for our Iterative Closest Ellipsoidal Transform (ICET) point cloud registration algorithm. Code is structured in a ROS package to demonstrate real-time HD Map generation. Also included is a jupyter notebook with inline 3D visualization so our algorithm can be tested without needing to set up a ROS enviornment on your machine. 
+This repository contains code for our Iterative Closest Ellipsoidal Transform (ICET) point cloud registration algorithm. Code is structured in a ROS package to demonstrate real-time HD Map generation. Also included is a [jupyter notebook](https://github.com/mcdermatt/ICET/blob/main/src/ICET_demo.ipynb) with inline 3D visualization so our algorithm can be tested without needing to set up a ROS enviornment on your machine. 
 
 ## Real-time HD Map generation
 
 ![](https://github.com/mcdermatt/ICET/blob/main/demo1.gif)
 
-https://github.com/mcdermatt/ASAR/tree/main/v3
 
+## Compile
+
+Use the following commands to download and compile ICET
+```
+cd ~/catkin_ws/src
+git clone https://github.com/mcdermatt/ICET
+cd ..
+catkin_make
+```
+This package was developed and tested with ROS Noetic
 
 ## Cite ICET
 
-Thank you for citing our work if you use any of this code: 
+Thank you for citing our work if you have used any of our code: 
 
 [Mitigating Shadows in LIDAR Scan Matching Using Spherical Voxels](https://ieeexplore.ieee.org/stamp/stamp.jsp?arnumber=9928328) 
 ```
