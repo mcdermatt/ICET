@@ -23,6 +23,9 @@ Begin by sourcing your workspace and running a roscore
 source ~/catkin_ws/devel/setup.bash
 roscore
 ```
+Uncomment the chunk of code in lines 86-130 of the fake_lidar node that corresponds to the the desired filetype of your point cloud data.
+
+Rename 'fn1' to match your point clouds files.
 
 Open a new terminal and run the launch file
 ```
@@ -32,6 +35,9 @@ roslaunch ICET simple_mapping.launch
 
 HD Maps are published as PointCloud2 messages in the /hd_map topic which can be viewed via RViz
 
+A "snail trail" showing the trajectory of the vehicle is also published as a PointCloud2 message as /snail_trail
+
+Estimated transforms between frames and the associated covarince estimates output by ICET are published to /relative_transform and  /relative_covariance respectively 
 
 ## Cite ICET
 
