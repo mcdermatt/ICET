@@ -2,8 +2,6 @@
 
 This repository contains code for our Iterative Closest Ellipsoidal Transform (ICET) point cloud registration algorithm. Code is structured in a ROS package to demonstrate real-time HD Map generation. Also included is a [jupyter notebook](https://github.com/mcdermatt/ICET/blob/main/src/ICET_demo.ipynb) with inline 3D visualization so our algorithm can be tested without needing to set up a ROS enviornment on your machine. 
 
-## Real-time HD Map generation
-
 ![](https://github.com/mcdermatt/ICET/blob/main/demo1.gif)
 
 
@@ -17,6 +15,23 @@ cd ..
 catkin_make
 ```
 This package was developed and tested with ROS Noetic
+
+## Real-time HD Map generation
+
+Begin by sourcing your workspace and running a roscore
+```
+source ~/catkin_ws/devel/setup.bash
+roscore
+```
+
+Open a new terminal and run the launch file
+```
+source ~/catkin_ws/devel/setup.bash
+roslaunch ICET simple_mapping.launch
+```
+
+HD Maps are published as PointCloud2 messages in the /hd_map topic which can be viewed via RViz
+
 
 ## Cite ICET
 
