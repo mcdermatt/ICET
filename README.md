@@ -1,8 +1,8 @@
 # ICET
 
-This repository contains code for our Iterative Closest Ellipsoidal Transform (ICET) point cloud registration algorithm. Code is structured in a ROS package to demonstrate real-time HD Map generation. Also included is jupyter notebook with inline 3D visualization to demonstrate using our algorithm without needing to set up a ROS enviornment. 
+This repository contains code for our Iterative Closest Ellipsoidal Transform (ICET) point cloud registration algorithm. Code is structured in a ROS package to demonstrate real-time HD Map generation. Also included is a jupyter notebook with inline 3D visualization so our algorithm can be tested without needing to set up a ROS enviornment on your machine. 
 
-## Real-time HD Map generation in RViz
+## Real-time HD Map generation
 
 ![](https://github.com/mcdermatt/ICET/blob/main/demo1.gif)
 
