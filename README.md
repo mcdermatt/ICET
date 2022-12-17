@@ -39,6 +39,9 @@ A "snail trail" showing the trajectory of the vehicle is also published as a Poi
 
 Estimated transforms between frames and the associated covarince estimates output by ICET are published to "/relative_transform" and  "/relative_covariance" respectively 
 
+![](https://github.com/mcdermatt/ICET/blob/main/map1.jpg)
+
+
 ## Cite ICET
 
 Thank you for citing our work if you have used any of our code: 
