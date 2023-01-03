@@ -86,8 +86,7 @@ def get_cluster_fast(rads, thresh = 0.5, mnp = 100):
     inner_idx = tf.gather(jumps_rag.to_tensor(), first_big_enough, batch_dims=1) + 1
     inner_radii  = tf.gather(tf.transpose(rads), inner_idx, batch_dims=1)
     #get radial distance of closest point on near side of cluster
-    # next_inner_idx = tf.gather(jumps_rag.to_tensor(), tf.nn.relu(first_big_enough - 1), batch_dims=1) - 1 #incorrect(?)
-    next_inner_idx = tf.gather(jumps_rag.to_tensor(), tf.nn.relu(first_big_enough), batch_dims=1) - 1
+    next_inner_idx = tf.gather(jumps_rag.to_tensor(), tf.nn.relu(first_big_enough-1), batch_dims=1) - 1
     next_inner_radii = tf.gather(tf.transpose(rads), tf.nn.relu(next_inner_idx), batch_dims=1) 
     #NOTE: TF-GPU defaults to zero out out-of-range tensor indices, while TF-CPU does not- that's why we need tf.nn.relu() here
 
@@ -95,7 +94,7 @@ def get_cluster_fast(rads, thresh = 0.5, mnp = 100):
     inner_skip_dist = inner_radii - next_inner_radii
     #of these nonzero distances, some are smaller than max_buffer -> leave as is, all else set to max_buffer
     too_big = tf.cast(tf.math.less(inner_skip_dist*2, max_buffer), tf.float32)
-    inner_skip_dist = inner_skip_dist*too_big + (1-too_big)*max_buffer
+    inner_skip_dist = inner_skip_dist*too_big + too_big*max_buffer
     temp = tf.cast(tf.math.equal(inner_skip_dist, 0), tf.float32)*max_buffer #set all others to max_buffer
     inner = inner_radii - inner_skip_dist - temp
 
