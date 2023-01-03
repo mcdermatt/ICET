@@ -27,12 +27,10 @@ def get_cluster_fast(rads, thresh = 0.5, mnp = 100):
     z = tf.zeros([1, tf.shape(rads)[1].numpy()])
     shifted = tf.concat((rads[1:], z), axis = 0)
     diff = shifted - rads
-
-    # #find where difference jumps
-    jumps = tf.where(diff > thresh)
+    jumps = tf.where(diff > thresh)    #find where difference jumps
 
     #----------------------------------------------------------------------
-    #TO FIX BUG THAT PREVENTS VOXELS FROM BEING FORMED AROUND VERY TIGHT DISTINCT CLUSETERS OF POINTS (8/9/22)
+    #TO FIX BUG THAT PREVENTS VOXELS FROM BEING FORMED AROUND VERY TIGHT DISTINCT CLUSETERS OF POINTS
     #       This is happening becuase we are adding in 0 as a first element only to spikes(?) that already have jumps!
     #get indexes of all used spikes
     used = jumps[:,1][None,:]
@@ -69,14 +67,13 @@ def get_cluster_fast(rads, thresh = 0.5, mnp = 100):
 
     #flag spikes where all npts_between_jumps are less than mnp
     biggest_jump = tf.math.reduce_max(npts_between_jumps, axis = 1)
-    # mnp = 100 #minumum number of points per cluster (defined in ICET class)
     good_clusters = tf.cast(tf.math.greater(biggest_jump, mnp), tf.int32)
 
     #get idx within jumps_rag corresponding to first sufficiently large jump
     big_enough = tf.cast(tf.math.greater(npts_between_jumps, mnp), tf.int32)
     first_big_enough = tf.math.argmax(big_enough, axis = 1)
 
-    #simple way-- just use radial measurements of inner and outermost points in cluster
+    #simple way: just use radial measurements of inner and outermost points in cluster
     # #--------------------------------------------------------------------------------------------------------
     # inner_idx = tf.gather(jumps_rag.to_tensor(), first_big_enough, batch_dims=1) + 1
     # inner  = tf.gather(tf.transpose(rads), inner_idx, batch_dims=1)
@@ -84,13 +81,15 @@ def get_cluster_fast(rads, thresh = 0.5, mnp = 100):
     # outer  = tf.gather(tf.transpose(rads), outer_idx, batch_dims=1)
     # #--------------------------------------------------------------------------------------------------------
 
-    #as described in paper
+    #as described in spherical paper
     #--------------------------------------------------------------------------------------------------------
     inner_idx = tf.gather(jumps_rag.to_tensor(), first_big_enough, batch_dims=1) + 1
     inner_radii  = tf.gather(tf.transpose(rads), inner_idx, batch_dims=1)
     #get radial distance of closest point on near side of cluster
-    next_inner_idx = tf.gather(jumps_rag.to_tensor(), first_big_enough-1, batch_dims=1) - 1
-    next_inner_radii = tf.gather(tf.transpose(rads), next_inner_idx, batch_dims=1) 
+    # next_inner_idx = tf.gather(jumps_rag.to_tensor(), tf.nn.relu(first_big_enough - 1), batch_dims=1) - 1 #incorrect(?)
+    next_inner_idx = tf.gather(jumps_rag.to_tensor(), tf.nn.relu(first_big_enough), batch_dims=1) - 1
+    next_inner_radii = tf.gather(tf.transpose(rads), tf.nn.relu(next_inner_idx), batch_dims=1) 
+    #NOTE: TF-GPU defaults to zero out out-of-range tensor indices, while TF-CPU does not- that's why we need tf.nn.relu() here
 
     #will be zero when inner idx occurs on first element of spike, otherwise correct soln
     inner_skip_dist = inner_radii - next_inner_radii
@@ -99,9 +98,10 @@ def get_cluster_fast(rads, thresh = 0.5, mnp = 100):
     inner_skip_dist = inner_skip_dist*too_big + (1-too_big)*max_buffer
     temp = tf.cast(tf.math.equal(inner_skip_dist, 0), tf.float32)*max_buffer #set all others to max_buffer
     inner = inner_radii - inner_skip_dist - temp
+
     #repeat similar process for outer limits of each cell
-    outer_idx = tf.gather(jumps_rag.to_tensor(), first_big_enough + 1, batch_dims=1) - 1
-    outer_radii  = tf.gather(tf.transpose(rads), outer_idx, batch_dims=1)
+    outer_idx = tf.gather(jumps_rag.to_tensor(), tf.nn.relu(first_big_enough + 1), batch_dims=1) - 1
+    outer_radii  = tf.gather(tf.transpose(rads), tf.nn.relu(outer_idx), batch_dims=1)
     next_outer_idx = tf.gather(jumps_rag.to_tensor(), first_big_enough + 1, batch_dims=1) +1
     next_outer_radii = tf.gather(tf.transpose(rads), next_outer_idx, batch_dims=1) 
 
@@ -111,11 +111,8 @@ def get_cluster_fast(rads, thresh = 0.5, mnp = 100):
     outer = outer_radii + outer_skip_dist
     #--------------------------------------------------------------------------------------------------------
 
-    # bounds = tf.convert_to_tensor(np.array([inner, outer]).T)
     bounds = tf.concat((inner[:,None], outer[:,None]), axis = 1)
     bounds = tf.cast(good_clusters[:,None], tf.float32) * bounds #suppress cells with no good clusters
-
-    # print("\n getting bounds took", time.time() - before,"seconds")
 
     return bounds
 
