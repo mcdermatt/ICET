@@ -1,5 +1,13 @@
 import numpy as np
 import tensorflow as tf
+
+# # Set CPU as available physical device (for hardware debug) ~~~~~~~~~~~~~~~~~~~~~~~~~
+# my_devices = tf.config.experimental.list_physical_devices(device_type='CPU')
+# tf.config.experimental.set_visible_devices(devices= my_devices, device_type='CPU')
+# # tf.debugging.set_log_device_placement(True)
+# tf.config.set_visible_devices([], 'GPU')
+# #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
 from vedo import *
 import vtk
 import time

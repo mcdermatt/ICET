@@ -3,6 +3,14 @@ from vedo import *
 from ipyvtklink.viewer import ViewInteractiveWidget
 import time
 import tensorflow as tf
+
+# # Set CPU as available physical device (for hardware debug) ~~~~~~~~~~~~~~~~~~~~~~~~~
+# my_devices = tf.config.experimental.list_physical_devices(device_type='CPU')
+# tf.config.experimental.set_visible_devices(devices= my_devices, device_type='CPU')
+# # tf.debugging.set_log_device_placement(True)
+# tf.config.set_visible_devices([], 'GPU')
+# #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
 from tensorflow.math import sin, cos, tan
 import tensorflow_probability as tfp
 from utils import R2Euler, Ell, jacobian_tf, R_tf, get_cluster, get_cluster_fast
@@ -478,151 +486,6 @@ class ICET():
 		else:
 			self.cloud2_static = self.cloud2_tensor_OG.numpy()
 
-	def main_1(self, niter, x0):
-		""" main loop using naive radial voxels (no dynamic radial growth applied)"""
-
-		self.X = x0
-
-		o = self.get_occupied()
-		# print("occupied = ", o)
-		if self.draw:
-			corn_o = self.get_corners(o)
-			# self.draw_cell(corn_o)
-			self.draw_car()
-
-		inside1, npts1 = self.get_points_inside(self.cloud1_tensor_spherical,o[:,None])		
-		mu1, sigma1 = self.fit_gaussian(self.cloud1_tensor, inside1, tf.cast(npts1, tf.float32))
-		enough1 = tf.where(npts1 > self.min_num_pts)[:,0]
-		mu1_enough = tf.gather(mu1, enough1)
-		sigma1_enough = tf.gather(sigma1, enough1)
-
-		# #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-		# # highlight points in usable cells from scan 1
-		# for z in enough1:
-		# 	temp = tf.gather(self.cloud1_tensor, inside1[z]).numpy()
-		# 	self.disp.append(Points(temp, c = 'green', r = 4))
-		# #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-		# print("sigma1 \n", sigma1)
-		U, L = self.get_U_and_L(sigma1_enough, mu1_enough, tf.gather(o, enough1), method = 1) #UKFtype strategy (typical ICET)
-		# U, L = self.get_U_and_L(sigma1_enough, mu1_enough, tf.gather(o, enough1), method = 0) #simple extended axis length test (NDT override)
-		# U, L = self.get_U_and_L(sigma1, o)
-		# print("U: \n", U)
-		# print("L: \n", L)
-		if self.draw:
-			# self.visualize_L(mu1_enough, U, L)
-			self.draw_ell(mu1_enough, sigma1_enough, pc = 1, alpha = 1)
-			self.draw_cloud(self.cloud1_tensor.numpy(), pc = 1)
-
-		for i in range(niter):
-			print("\n estimated solution vector X: \n", self.X)
-
-			#transform cartesian point cloud 2 by estimated solution vector X
-			t = self.X[:3]
-			rot = R_tf(-self.X[3:])
-			self.cloud2_tensor = tf.matmul((self.cloud2_tensor_OG + t), tf.transpose(rot)) #translate, then rotate
-			# self.cloud2_tensor = tf.matmul((self.cloud2_tensor_OG), tf.transpose(rot)) + t   #rotate then translate
-
-			#convert back to spherical coordinates
-			self.cloud2_tensor_spherical = tf.cast(self.c2s(self.cloud2_tensor), tf.float32)
-
-			#remove points from cloud 2 that are too close to vehicle
-			not_too_close2 = tf.where(self.cloud2_tensor_spherical[:,0] > self.min_cell_distance)[:,0]
-			self.cloud2_tensor_spherical = tf.gather(self.cloud2_tensor_spherical, not_too_close2)
-			self.cloud2_tensor = tf.gather(self.cloud2_tensor, not_too_close2)
-
-			#find points from scan 2 that fall inside occupied voxels
-			inside2, npts2 = self.get_points_inside(self.cloud2_tensor_spherical, o[:,None])
-
-			#fit gaussians distributions to each of these groups of points 		
-			mu2, sigma2 = self.fit_gaussian(self.cloud2_tensor, inside2, tf.cast(npts2, tf.float32))
-			enough2 = tf.where(npts2 > self.min_num_pts)[:,0]
-			mu2_enough = tf.gather(mu2, enough2)
-			#draw all distribution from scan 2, even in cells without distribution from scan1
-			# sigma2_enough = tf.gather(sigma2, enough2)
-			# self.draw_ell(mu2_enough, sigma2_enough, pc = 2, alpha = 0.5)
-
-			#get correspondences
-			corr = tf.sets.intersection(enough1[None,:], enough2[None,:]).values
-			# print("corr indices", corr)
-			# self.draw_correspondences(mu1, mu2, corr)
-
-			y0_i = tf.gather(mu1, corr)
-			sigma0_i = tf.gather(sigma1, corr)
-			npts0_i = tf.gather(npts1, corr)
-			# print(sigma1)
-
-			y_i = tf.gather(mu2, corr)
-			sigma_i = tf.gather(sigma2, corr)
-			npts_i = tf.gather(npts2, corr)
-
-			U_i = tf.gather(U, corr)
-			L_i = tf.gather(L, corr)
-
-			#get matrix containing partial derivatives for each voxel mean
-			H = jacobian_tf(tf.transpose(y_i), self.X[3:]) # shape = [num of corr * 3, 6]
-			H = tf.reshape(H, (tf.shape(H)[0]//3,3,6)) # -> need shape [#corr//3, 3, 6]
-			# print("H \n", H)
-
-			#construct sensor noise covariance matrix
-			R_noise = (tf.transpose(tf.transpose(sigma0_i, [1,2,0]) / tf.cast(npts0_i - 1, tf.float32)) + 
-						tf.transpose(tf.transpose(sigma_i, [1,2,0]) / tf.cast(npts_i - 1, tf.float32)) )
-			R_noise = L_i @ tf.transpose(U_i, [0,2,1]) @ R_noise @ U_i @ tf.transpose(L_i, [0,2,1])
-
-			#take inverse of R_noise to get our weighting matrix
-			W = tf.linalg.pinv(R_noise)
-
-			U_iT = tf.transpose(U_i, [0,2,1])
-			LUT = L_i @ U_iT
-
-			# use LUT to remove rows of H corresponding to overly extended directions
-			H_z = LUT @ H
-
-			HTWH = tf.math.reduce_sum(tf.matmul(tf.matmul(tf.transpose(H_z, [0,2,1]), W), H_z), axis = 0) #was this (which works)
-			HTW = tf.matmul(tf.transpose(H_z, [0,2,1]), W)
-
-			L2, lam, U2 = self.check_condition(HTWH)
-
-			# create alternate corrdinate system to align with axis of scan 1 distributions
-			z = tf.squeeze(tf.matmul(LUT, y_i[:,:,None]))
-			z0 = tf.squeeze(tf.matmul(LUT, y0_i[:,:,None]))	
-			dz = z - z0
-			dz = dz[:,:,None] #need to add an extra dimension to dz to get the math to work out
-
-			dx = tf.squeeze(tf.matmul( tf.matmul(tf.linalg.pinv(L2 @ lam @ tf.transpose(U2)) @ L2 @ tf.transpose(U2) , HTW ), dz))
-			dx = tf.math.reduce_sum(dx, axis = 0)
-			# print("\n dx \n", dx)
-
-			self.X += dx
-
-			#get output covariance matrix
-			self.Q = tf.linalg.pinv(HTWH)
-			# print("\n Q \n", Q)
-
-			self.pred_stds = tf.linalg.tensor_diag_part(tf.math.sqrt(tf.abs(self.Q)))
-		print("pred_stds: \n", self.pred_stds)
-
-		#draw PC2
-		# if self.draw == True:
-		# 	self.draw_ell(y_i, sigma_i, pc = 2, alpha = 0.5)
-		# 	self.draw_cloud(self.cloud2_tensor.numpy(), pc = 2)
-		# 	# self.draw_cloud(self.cloud2_tensor_OG.numpy(), pc = 3) #draw in differnt color
-			
-			# print("\n L2 \n", L2)
-			# print("\n lam \n", lam)
-			# print("\n U2 \n", U2)
-
-		#test
-		# corn_o = self.get_corners(tf.gather(o, corr)) #nope
-		# corn_o = self.get_corners(o[:,None]) #nope
-		# corn_o = self.get_corners(corr)
-		# corn_o = self.get_corners(tf.gather(o, enough1)) #nope
-		# self.draw_cell(corn_o)
-
-		# print("o \n", o)
-		# print("corr \n", corr)
-		# print("tf.gather(o,corr) \n",tf.gather(o,corr))
-
 
 	def get_points_in_cluster(self, cloud, occupied_spikes, bounds):
 		""" returns ragged tensor containing the indices of points in <cloud> in each cluster 
@@ -1060,44 +923,48 @@ class ICET():
 		# print("took", time.time()-st, "s to tf.gather")
 		st = time.time()
 
-		# #~~~~~~~~~~
-		# #old (works but slow(?))
-		# mu = tf.math.reduce_mean(coords, axis=1)
-		# # print("mu", tf.shape(mu))
-		# # print("mu[:,0][:,None]", tf.shape(mu[:,0][:,None]))
-		# # print("xpos", tf.shape(xpos))
-		# xx = tf.math.reduce_sum(tf.math.square(xpos - mu[:,0][:,None] ), axis = 1)/npts
-		# yy = tf.math.reduce_sum(tf.math.square(ypos - mu[:,1][:,None] ), axis = 1)/npts
-		# zz = tf.math.reduce_sum(tf.math.square(zpos - mu[:,2][:,None] ), axis = 1)/npts
-		# xy = tf.math.reduce_sum( (xpos - mu[:,0][:,None])*(ypos - mu[:,1][:,None]), axis = 1)/npts  #+
-		# xz = tf.math.reduce_sum( (xpos - mu[:,0][:,None])*(zpos - mu[:,2][:,None]), axis = 1)/npts #-
-		# yz = tf.math.reduce_sum( (ypos - mu[:,1][:,None])*(zpos - mu[:,2][:,None]), axis = 1)/npts #-
-		# return(mu, sigma)
-		# #~~~~~~~~~~
+		#if GPU is not available
+		if len(tf.config.experimental.list_physical_devices('GPU')) == 0:
+			#old (works on CPU but SLOW)
+			mu = tf.math.reduce_mean(coords, axis=1)
+			# print("mu", tf.shape(mu))
+			# print("mu[:,0][:,None]", tf.shape(mu[:,0][:,None]))
+			# print("xpos", tf.shape(xpos))
+			xx = tf.math.reduce_sum(tf.math.square(xpos - mu[:,0][:,None] ), axis = 1)/npts
+			yy = tf.math.reduce_sum(tf.math.square(ypos - mu[:,1][:,None] ), axis = 1)/npts
+			zz = tf.math.reduce_sum(tf.math.square(zpos - mu[:,2][:,None] ), axis = 1)/npts
+			xy = tf.math.reduce_sum( (xpos - mu[:,0][:,None])*(ypos - mu[:,1][:,None]), axis = 1)/npts  #+
+			xz = tf.math.reduce_sum( (xpos - mu[:,0][:,None])*(zpos - mu[:,2][:,None]), axis = 1)/npts #-
+			yz = tf.math.reduce_sum( (ypos - mu[:,1][:,None])*(zpos - mu[:,2][:,None]), axis = 1)/npts #-
+			sigma = tf.Variable([xx, xy, xz,
+								 xy, yy, yz,
+								 xz, yz, zz]) 
+			sigma = tf.reshape(tf.transpose(sigma), (tf.shape(sigma)[1] ,3,3))
+			return(mu, sigma)
 
-		# #~~~~~~~~~~
-		#new method downsampling to first n points in each ragged tensor -- MUCH FASTER!!!
-		mu = tf.math.reduce_mean(coords, axis = 1)[:,None]
-		idx = tf.range(self.min_num_pts)
-		# idx = tf.range(self.min_num_pts-1) #test
-		xpos = tf.gather(xpos, idx, axis = 1)
-		ypos = tf.gather(ypos, idx, axis = 1)
-		zpos = tf.gather(zpos, idx, axis = 1)
+		#if GPU is available
+		else:
+			#new method downsampling to first n points in each ragged tensor -- MUCH FASTER (but only works on GPU)
+			mu = tf.math.reduce_mean(coords, axis = 1)[:,None]
+			idx = tf.range(self.min_num_pts)
+			# idx = tf.range(self.min_num_pts-1) #test
+			xpos = tf.gather(xpos, idx, axis = 1)
+			ypos = tf.gather(ypos, idx, axis = 1)
+			zpos = tf.gather(zpos, idx, axis = 1)
 
-		xx = tf.math.reduce_sum(tf.math.square(xpos - mu[:,:,0] ), axis = 1)/self.min_num_pts
-		yy = tf.math.reduce_sum(tf.math.square(ypos - mu[:,:,1] ), axis = 1)/self.min_num_pts
-		zz = tf.math.reduce_sum(tf.math.square(zpos - mu[:,:,2] ), axis = 1)/self.min_num_pts
-		xy = tf.math.reduce_sum( (xpos - mu[:,:,0])*(ypos - mu[:,:,1]), axis = 1)/self.min_num_pts
-		xz = tf.math.reduce_sum( (xpos - mu[:,:,0])*(zpos - mu[:,:,2]), axis = 1)/self.min_num_pts
-		yz = tf.math.reduce_sum( (ypos - mu[:,:,1])*(zpos - mu[:,:,2]), axis = 1)/self.min_num_pts
+			xx = tf.math.reduce_sum(tf.math.square(xpos - mu[:,:,0] ), axis = 1)/self.min_num_pts
+			yy = tf.math.reduce_sum(tf.math.square(ypos - mu[:,:,1] ), axis = 1)/self.min_num_pts
+			zz = tf.math.reduce_sum(tf.math.square(zpos - mu[:,:,2] ), axis = 1)/self.min_num_pts
+			xy = tf.math.reduce_sum( (xpos - mu[:,:,0])*(ypos - mu[:,:,1]), axis = 1)/self.min_num_pts
+			xz = tf.math.reduce_sum( (xpos - mu[:,:,0])*(zpos - mu[:,:,2]), axis = 1)/self.min_num_pts
+			yz = tf.math.reduce_sum( (ypos - mu[:,:,1])*(zpos - mu[:,:,2]), axis = 1)/self.min_num_pts
 
-		sigma = tf.Variable([xx, xy, xz,
-							 xy, yy, yz,
-							 xz, yz, zz]) 
-		sigma = tf.reshape(tf.transpose(sigma), (tf.shape(sigma)[1] ,3,3))
+			sigma = tf.Variable([xx, xy, xz,
+								 xy, yy, yz,
+								 xz, yz, zz]) 
+			sigma = tf.reshape(tf.transpose(sigma), (tf.shape(sigma)[1] ,3,3))
 
-		return(mu[:,0,:], sigma)
-		# #~~~~~~~~~~
+			return(mu[:,0,:], sigma)
 
 
 	def get_points_inside(self, cloud, cells):
