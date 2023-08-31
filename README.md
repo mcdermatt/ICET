@@ -53,7 +53,7 @@ Thank you for citing our work if you have used any of our code:
   journal={arXiv preprint arXiv:2306.08690},
   year={2023}
 }
-
+```
 [Mitigating Shadows in LIDAR Scan Matching Using Spherical Voxels](https://ieeexplore.ieee.org/stamp/stamp.jsp?arnumber=9928328) 
 ```
 @ARTICLE{SphericalICET,
