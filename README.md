@@ -45,6 +45,15 @@ Estimated transforms between frames and the associated covarince estimates outpu
 
 Thank you for citing our work if you have used any of our code: 
 
+[ICET Online Accuracy Characterization for Geometry-Based Laser Scan Matching](https://arxiv.org/pdf/2306.08690.pdf) 
+```
+@article{mcdermott2023icet,
+  title={ICET Online Accuracy Characterization for Geometry-Based Laser Scan Matching},
+  author={McDermott, Matthew and Rife, Jason},
+  journal={arXiv preprint arXiv:2306.08690},
+  year={2023}
+}
+
 [Mitigating Shadows in LIDAR Scan Matching Using Spherical Voxels](https://ieeexplore.ieee.org/stamp/stamp.jsp?arnumber=9928328) 
 ```
 @ARTICLE{SphericalICET,
