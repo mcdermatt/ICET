@@ -56,7 +56,7 @@ rostopic echo /tf
 
 An OpenGL visualizer is included which can be helpful for tuning the C++ implementation of ICET for new sensors and enviornments. Exaple use is demonstrated in the icetViz.cpp file. 
 
-![](https://github.com/mcdermatt/ICET/blob/main/figures/cppviz.jpg)
+![](https://github.com/mcdermatt/ICET/blob/main/figures/cppViz.jpg)
 
 
 ## Cite ICET
