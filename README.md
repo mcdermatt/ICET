@@ -17,6 +17,8 @@ This package was developed and tested with ROS Noetic
 
 ## Real-time HD Map generation
 
+![](https://github.com/mcdermatt/ICET/blob/main/figures/map1.jpg)
+
 Begin by sourcing your workspace and running a roscore
 ```
 source ~/catkin_ws/devel/setup.bash
@@ -51,13 +53,9 @@ Changes in pose between subsequent scans are broadcast as ROS Transforms and can
 ```
 rostopic echo /tf
 ```
-
-![](https://github.com/mcdermatt/ICET/blob/main/figures/map1.jpg)
-
 An OpenGL visualizer is included which can be helpful for tuning the C++ implementation of ICET for new sensors and enviornments. Exaple use is demonstrated in the icetViz.cpp file. 
 
-![](https://github.com/mcdermatt/ICET/blob/main/figures/cppViz.jpg)
-
+![](https://github.com/mcdermatt/ICET/blob/main/figures/cppviz.png)
 
 ## Cite ICET
 
