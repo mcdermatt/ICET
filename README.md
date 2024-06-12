@@ -53,6 +53,13 @@ Changes in pose between subsequent scans are broadcast as ROS Transforms and can
 ```
 rostopic echo /tf
 ```
+
+## Benchmarking
+
+Runtime for scan registration is dependant on sensor resolution, computer hardware, voxel resolution, and the number of iterations the algorithm is allowed to run. In our testing, we were able to achieve a optimal registration accuracy with a mean registration time of 35ms for 64-channel data running for 7 iterations on a Ryzen 5800x CPU and with a resolution of 75 azimuthal voxels and 24 elevation voxels.   
+
+## Additional Tools
+
 An OpenGL visualizer is included which can be helpful for tuning the C++ implementation of ICET for new sensors and enviornments. Exaple use is demonstrated in the icetViz.cpp file. 
 
 ![](https://github.com/mcdermatt/ICET/blob/main/figures/cppviz.png)
