@@ -60,7 +60,7 @@ Runtime for scan registration is dependant on sensor resolution, computer hardwa
 
 ## Additional Tools
 
-An OpenGL visualizer is included which can be helpful for tuning the C++ implementation of ICET for new sensors and enviornments. Exaple use is demonstrated in the icetViz.cpp file. 
+An OpenGL visualizer is included which can be helpful for tuning the C++ implementation of ICET for new sensors and enviornments. Exaple use is demonstrated in the icet_cpp_demo. which is located within the /src/ directory. 
 
 ![](https://github.com/mcdermatt/ICET/blob/main/figures/cppviz.png)
 
