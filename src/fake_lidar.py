@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 import rospy # import rospy, the package that lets us use ros in python. 
-from ICET.msg import Num #using custom message type
+# from ICET.msg import Num #using custom message type
 import numpy as np
 from rospy.numpy_msg import numpy_msg
 from rospy_tutorials.msg import Floats
@@ -74,7 +74,7 @@ def main():
     pcPub = rospy.Publisher('raw_point_cloud', PointCloud2, queue_size = 1)
 
     # publish custom message with additional LIDAR info
-    etcPub = rospy.Publisher('lidar_info', Num, queue_size=1) #This publisher can hold 10 msgs that haven't been sent yet.  
+    # etcPub = rospy.Publisher('lidar_info', Num, queue_size=1) #This publisher can hold 10 msgs that haven't been sent yet.  
     rospy.init_node('LidarScanner', anonymous=False)
     r = 10 # most datasets are recorded wiht a 10Hz Sensor
     rate = rospy.Rate(r) # hz
@@ -164,25 +164,25 @@ def main():
         # pcNpyPub.publish(pcNpy)                #publish point cloud as numpy_msg (rospy)
         pcPub.publish(point_cloud(pcNpy, 'map')) #publish point cloud as point_cloud2 message
 
-        # publish custom <Num> message type~~~~~~~~~~~~~~~~~
-        msg = Num()
-        msg.frame = idx
-        # if idx == 1: 
-        if idx < 3: #for debug
-            msg.restart = True
-        else:
-            msg.restart = False
+        # # publish custom <Num> message type~~~~~~~~~~~~~~~~~
+        # msg = Num()
+        # msg.frame = idx
+        # # if idx == 1: 
+        # if idx < 3: #for debug
+        #     msg.restart = True
+        # else:
+        #     msg.restart = False
 
-        #for debug: provide prior knowledge of ground truth for simulated dummy data
-        msg.true_transform = [0.0, 0.0, 0.0, 0.0, 0.0, 0.00] #[x, y, z, r, p, y]
+        # #for debug: provide prior knowledge of ground truth for simulated dummy data
+        # msg.true_transform = [0.0, 0.0, 0.0, 0.0, 0.0, 0.00] #[x, y, z, r, p, y]
 
-        status_str =  "Frame # " + str(idx) + " Lidar Timestamp %s" % rospy.get_time() # 
-        msg.status = status_str
+        # status_str =  "Frame # " + str(idx) + " Lidar Timestamp %s" % rospy.get_time() # 
+        # msg.status = status_str
 
-        # Publish the string message and log it (optional)
-        # rospy.loginfo(msg)
-        etcPub.publish(msg)
-        #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        # # Publish the string message and log it (optional)
+        # # rospy.loginfo(msg)
+        # etcPub.publish(msg)
+        # #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         
         # sleep so we don't publish way too many messages per second. This also gives us a chance to process incoming messages (but this node has no incoming messages)
         rate.sleep()
