@@ -12,6 +12,8 @@ find_package(catkin REQUIRED COMPONENTS
   roscpp
   std_msgs
   message_generation
+  nav_msgs
+  tf
   tf2
   tf2_ros
 )
@@ -199,6 +201,18 @@ add_executable(map_maker_node
                 src/utils.cpp
                 src/ThreadPool.cpp)
 target_link_libraries(map_maker_node
+  ${catkin_LIBRARIES}
+  ${PCL_LIBRARIES}
+  tbb
+)
+
+
+add_executable(odometry_node 
+                src/odometry.cpp 
+                src/icet.cpp 
+                src/utils.cpp
+                src/ThreadPool.cpp)
+target_link_libraries(odometry_node
   ${catkin_LIBRARIES}
   ${PCL_LIBRARIES}
   tbb

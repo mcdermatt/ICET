@@ -1,4 +1,5 @@
 #include <ros/ros.h>
+#include <tf/transform_broadcaster.h>
 #include <sensor_msgs/PointCloud2.h>
 #include <pcl_conversions/pcl_conversions.h>
 #include <pcl/point_cloud.h>
@@ -20,19 +21,17 @@ using namespace Eigen;
 
 class OdometryNode {
 public:
-    OdometryNode() : nh_("~"), initialized_(false) ,  q(600'000,3) {
+    OdometryNode() : nh_("~"), initialized_(false) {
         // Set up ROS subscribers and publishers
-        // pointcloud_sub_ = nh_.subscribe("/velodyne_points", 10, &OdometryNode::pointcloudCallback, this); //use when connected to Velodyne VLP-16
+        pointcloud_sub_ = nh_.subscribe("/velodyne_points", 10, &OdometryNode::pointcloudCallback, this); //use when connected to Velodyne VLP-16
         // pointcloud_sub_ = nh_.subscribe("/os1_cloud_node/points", 10, &OdometryNode::pointcloudCallback, this); //use when connected to Ouster OS1 sensor
-        pointcloud_sub_ = nh_.subscribe("/raw_point_cloud", 10, &OdometryNode::pointcloudCallback, this); //use with fake_lidar node
-        aligned_pointcloud_pub_ = nh_.advertise<sensor_msgs::PointCloud2>("/hd_map", 1);
-        snail_trail_pub_ = nh_.advertise<sensor_msgs::PointCloud2>("/snail_trail_topic", 1);
+        // pointcloud_sub_ = nh_.subscribe("/raw_point_cloud", 10, &OdometryNode::pointcloudCallback, this); //use with fake_lidar node
+        odom_pub = nh_.advertise<nav_msgs::Odometry>("/odom", 50);
 
         X0.resize(6);
         X0 << 0., 0., 0., 0., 0., 0.; 
 
-        snailTrail.resize(1,3);
-        snailTrail.row(0) << 0., 0., 0.;
+        ros::Rate rate(10);
     }
 
     void pointcloudCallback(const sensor_msgs::PointCloud2ConstPtr& msg) {
@@ -48,7 +47,7 @@ public:
             // On the first callback, initialize prev_pcl_cloud_
             prev_pcl_cloud_ = pcl_cloud;
             initialized_ = true;
-            prev_pcl_matrix = convertPCLtoEigen(prev_pcl_cloud_); //test
+            prev_pcl_matrix = convertPCLtoEigen(prev_pcl_cloud_);
             return;
         }
 
@@ -84,32 +83,12 @@ public:
         //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
         // Convert back to ROS PointCloud2 and publish the aligned point cloud
-        sensor_msgs::PointCloud2 aligned_cloud_msg;
         MatrixXf rot_mat = utils::R(X[3], X[4], X[5]);
         Eigen::RowVector3f trans(X[0], X[1], X[2]);
-        // MatrixXf rot_mat = utils::R(-X[3], -X[4], -X[5]); //test
-        // Eigen::RowVector3f trans(-X[0], -X[1], -X[2]); //test
-
-        //pass pcl_matrix directly to map queue
-        // q.add_new_scan(pcl_matrix, trans, rot_mat);
-
-        //downsample pcl_matrix before passing to map queue
-        int downsampleSize = 10'000;
-        std::size_t originalSize = pcl_matrix.rows();
-        std::vector<std::size_t> indices(originalSize);
-        std::iota(indices.begin(), indices.end(), 0);
-        std::shuffle(indices.begin(), indices.end(), gen);
-        //account for situations where sensor is occluded and numpts << downsampleSize
-        Eigen::MatrixXf downsampledMatrix(std::min(downsampleSize, static_cast<int>(pcl_matrix.size()) / 3), pcl_matrix.cols());
-        for (std::size_t i = 0; i < downsampleSize; ++i) {
-            downsampledMatrix.row(i) = pcl_matrix.row(indices[i]);
-        }
-        q.add_new_scan(downsampledMatrix, trans, rot_mat);
 
         prev_pcl_matrix = pcl_matrix;
-        mapPC = q.getQueue();
 
-        //"broadcast" transform that relates /velodyne frame to /map frame ~~~~~~~~~~~~~~~~~~~~~
+        //broadcast transform that relates /velodyne frame to /map frame ~~~~~~~~~~~~~~~~~~~~~
         //convert ICET output X for scan i to homogenous transformation matrix
         Eigen::Matrix4f X_homo_i = Eigen::Matrix4f::Identity();
         X_homo_i.block<3, 3>(0, 0) = rot_mat;
@@ -119,54 +98,61 @@ public:
         X_homo = X_homo * X_homo_i;
         std::cout << "X: \n" << X_homo <<endl;
 
-        // Create a geometry_msgs::TransformStamped message
-        geometry_msgs::TransformStamped transformStamped;
-
-        // Set the frame IDs
-        transformStamped.header.frame_id = "map";         // Parent frame 
-        // transformStamped.child_frame_id = "velodyne";     // Child frame
-        // transformStamped.child_frame_id = "/os1_lidar";     // Child frame
-        transformStamped.child_frame_id = "sensor";     // Child frame
-
-        // Convert Eigen rotation matrix to quaternion
-        Eigen::Matrix3f rotationMatrix = rot_mat.topLeftCorner(3, 3); //X_i
-        // Eigen::Matrix3f rotationMatrix = X_homo.topLeftCorner(3, 3); //X
-        Eigen::Quaternionf quaternion(rotationMatrix);
+        // Create the odometry message
+        nav_msgs::Odometry odom;
+        // ros::Time current_time = msg->header.stamp;  // Use lidar scan timestamp --> issues with using old rosbag data
+        ros::Time current_time = ros::Time::now(); //use roscore computer timestamp 
+        odom.header.stamp = current_time;
+        odom.header.frame_id = "map";         // Parent frame 
+        odom.child_frame_id = "velodyne";     // Child frame
+        // odom.child_frame_id = "/os1_lidar";     // Child frame
 
         // Set the translation and rotation in the transform message
-        //X_i
-        transformStamped.transform.translation.x = trans(0);
-        transformStamped.transform.translation.y = trans(1);
-        transformStamped.transform.translation.z = trans(2);
-        // // X
-        // transformStamped.transform.translation.x = X_homo(0,3);
-        // transformStamped.transform.translation.y = X_homo(1,3);
-        // transformStamped.transform.translation.z = X_homo(2,3);
-        transformStamped.transform.rotation.x = quaternion.x();
-        transformStamped.transform.rotation.y = quaternion.y();
-        transformStamped.transform.rotation.z = quaternion.z();
-        transformStamped.transform.rotation.w = quaternion.w();
+        odom.pose.pose.position.x = X_homo(0,3);
+        odom.pose.pose.position.y = X_homo(1,3);
+        odom.pose.pose.position.z = X_homo(2,3);
+        // Convert Eigen rotation matrix to quaternion
+        Eigen::Matrix3f rotationMatrix = X_homo.topLeftCorner(3, 3);
+        Eigen::Quaternionf quaternion(rotationMatrix);
+        odom.pose.pose.orientation.x = quaternion.x();
+        odom.pose.pose.orientation.y = quaternion.y();
+        odom.pose.pose.orientation.z = quaternion.z();
+        odom.pose.pose.orientation.w = quaternion.w();
 
-        // Set the timestamp
-        // std::cout << msg->header.stamp << endl;
-        // transformStamped.header.stamp = msg->header.stamp;  // Use lidar scan timestamp --> issues with using old rosbag data
-        transformStamped.header.stamp = ros::Time::now(); //use PC timestamp 
+        //publish the velocity -- (assumes 10Hz LIDAR sensor)
+        odom.twist.twist.linear.x = 10*X[0];
+        odom.twist.twist.linear.y = 10*X[1];
+        odom.twist.twist.linear.z = 10*X[2];
+        odom.twist.twist.angular.x = 10*X[3];
+        odom.twist.twist.angular.y = 10*X[4];
+        odom.twist.twist.angular.z = 10*X[5];
+
+        odom_pub.publish(odom);
 
         // Broadcast the transform
-        broadcaster_.sendTransform(transformStamped);
+        geometry_msgs::TransformStamped odom_trans;
+        odom_trans.header.stamp = current_time;
+        odom_trans.header.frame_id = "map";
+        odom_trans.child_frame_id = "velodyne";
+        // Set the translation and rotation in the transform message
+        odom_trans.transform.translation.x = X_homo(0,3);
+        odom_trans.transform.translation.y = X_homo(1,3);
+        odom_trans.transform.translation.z = X_homo(2,3);
+        odom_trans.transform.rotation.x = quaternion.x();
+        odom_trans.transform.rotation.y = quaternion.y();
+        odom_trans.transform.rotation.z = quaternion.z();
+        odom_trans.transform.rotation.w = quaternion.w();
+
+        odom_broadcaster.sendTransform(odom_trans);
 
         //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        // Publish msg containing transform estimates
-        std_msgs::Header header; 
-        header.stamp = ros::Time::now(); //use current timestamp 
-        // header.stamp = msg->header.stamp; //use lidar scan timestamp --> issues with using rosbag data?
-
-        //TODO: figure out how to do custom msg stuff here...
 
         auto after1 = std::chrono::system_clock::now();
         auto after1Ms = std::chrono::time_point_cast<std::chrono::milliseconds>(after1);
         auto elapsedTimeMs = std::chrono::duration_cast<std::chrono::milliseconds>(after1Ms - beforeMs).count();
         std::cout << "Registered scans in: " << elapsedTimeMs << " ms" << std::endl;
+
+        // rate.sleep(); //do I need this??
     }
 
     Eigen::VectorXf X0;
@@ -174,18 +160,13 @@ public:
 private:
     ros::NodeHandle nh_;
     ros::Subscriber pointcloud_sub_;
-    ros::Publisher snail_trail_pub_;
-    ros::Publisher aligned_pointcloud_pub_;
+    ros::Publisher odom_pub;
+    tf::TransformBroadcaster odom_broadcaster;
     pcl::PointCloud<pcl::PointXYZ>::Ptr prev_pcl_cloud_;
     tf2_ros::Buffer tfBuffer_;
-    tf2_ros::TransformBroadcaster broadcaster_;
     bool initialized_;
     int frameCount = 0;
-    Eigen::MatrixXf snailTrail;
     Eigen::MatrixXf prev_pcl_matrix;
-    Eigen::MatrixXf mapPC;
-    std::random_device rd; //init for RNG
-    std::mt19937 gen;      
 
     //init variable to hold cumulative homogenous transform
     Eigen::Matrix4f X_homo = Eigen::Matrix4f::Identity(); 
