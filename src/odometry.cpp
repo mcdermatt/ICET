@@ -119,6 +119,18 @@ public:
         odom.pose.pose.orientation.z = quaternion.z();
         odom.pose.pose.orientation.w = quaternion.w();
 
+        // Set the pose covariance matrix
+        for (int i = 0; i < 36; ++i) {
+            odom.pose.covariance[i] = 0.0;
+        }
+        odom.pose.covariance[0] = it.pred_stds[0];  // x
+        odom.pose.covariance[7] = it.pred_stds[1];  // y
+        odom.pose.covariance[14] = it.pred_stds[2]; // z
+        odom.pose.covariance[21] = it.pred_stds[3]; // roll
+        odom.pose.covariance[28] = it.pred_stds[4]; // pitch
+        odom.pose.covariance[35] = it.pred_stds[5]; // yaw
+
+
         //publish the velocity -- (assumes 10Hz LIDAR sensor)
         odom.twist.twist.linear.x = 10*X[0];
         odom.twist.twist.linear.y = 10*X[1];

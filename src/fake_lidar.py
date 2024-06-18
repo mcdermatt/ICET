@@ -71,7 +71,8 @@ def main():
     # pcNpyPub = rospy.Publisher('numpy_cloud', numpy_msg(Floats), queue_size = 1)
 
     # traditional pointcloud2 msg
-    pcPub = rospy.Publisher('raw_point_cloud', PointCloud2, queue_size = 1)
+    # pcPub = rospy.Publisher('raw_point_cloud', PointCloud2, queue_size = 1)
+    pcPub = rospy.Publisher('velodyne_points', PointCloud2, queue_size = 1)
 
     # publish custom message with additional LIDAR info
     # etcPub = rospy.Publisher('lidar_info', Num, queue_size=1) #This publisher can hold 10 msgs that haven't been sent yet.  
