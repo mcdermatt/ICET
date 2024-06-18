@@ -1,0 +1,14 @@
+Extract predicted error covariance and ambiguous axis from ICET
+
+	Combine above to massively inflate predicted pred stds aligned with ambiguous components (simplifies integrate)
+
+
+Create basic odometry node
+
+
+Publish odometry estimates and estimated state error covariances as "Num" msg types
+
+	Use time stamp of each lidar scan as it's name
+
+
+Create pose graph using GTSAM

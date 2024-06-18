@@ -11,6 +11,7 @@ find_package(catkin REQUIRED COMPONENTS
   rospy
   roscpp
   std_msgs
+  message_generation
   tf2
   tf2_ros
 )
@@ -57,11 +58,10 @@ find_package(tf2 REQUIRED)
 find_package(tf2_ros REQUIRED)
 
 ## Generate messages in the 'msg' folder
-# add_message_files(
-#   FILES
-#   Message1.msg
-#   Message2.msg
-# )
+add_message_files(
+  FILES
+  Num.msg
+)
 
 ## Generate services in the 'srv' folder
 # add_service_files(
@@ -115,7 +115,7 @@ find_package(tf2_ros REQUIRED)
 catkin_package(
  INCLUDE_DIRS include
  LIBRARIES icet
- CATKIN_DEPENDS rospy rpscpp std_msgs tf2 tf2_ros
+ CATKIN_DEPENDS rospy rpscpp std_msgs tf2 tf2_ros message_runtime
  DEPENDS system_lib
 )
 

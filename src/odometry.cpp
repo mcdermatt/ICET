@@ -8,62 +8,23 @@
 #include <pcl/registration/icp.h>
 #include <Eigen/Dense>
 #include <random>
+#include <nav_msgs/Odometry.h>
+#include <geometry_msgs/Quaternion.h>
+#include <tf/tf.h>
 #include "icet.h"
 #include "utils.h"
 
 using namespace std;
 using namespace Eigen;
 
-//FIFO data structure to hold on to point clouds in large HD Map 
-class EigenQueue {
+
+class OdometryNode {
 public:
-    EigenQueue(int maxSize, int numCols) 
-        : maxSize(maxSize), numCols(numCols), matrix(maxSize, numCols), pos(0), filled(false) {}
-
-    //just add point to queue
-    void enqueue(const Eigen::VectorXf& row) {
-        if (row.size() != numCols) {
-            throw std::invalid_argument("Row size does not match the number of columns in the matrix");
-        }
-        matrix.row(pos) = row;
-        pos = (pos + 1) % maxSize;
-        if (pos == 0) filled = true;
-    }
-
-    //given rotation and translation-- add new scan and transform matrix
-    void add_new_scan(Eigen::MatrixXf newScan, Eigen::RowVector3f trans, MatrixXf rot_mat){
-        // const Eigen::VectorXf & row
-        for (int i = 0; i < newScan.rows(); i++){
-            enqueue(newScan.row(i));
-        }
-        // matrix = (matrix * rot_mat.inverse()).rowwise() - trans;
-        matrix = (matrix.rowwise() - trans) * rot_mat.inverse();
-    }
-
-    Eigen::MatrixXf getQueue() const {
-        if (!filled) {
-            return matrix.topRows(pos);
-        }
-        Eigen::MatrixXf result(maxSize, numCols);
-        result << matrix.bottomRows(maxSize - pos), matrix.topRows(pos);
-        return result;
-    }
-
-private:
-    int maxSize;
-    int numCols;
-    Eigen::MatrixXf matrix;
-    int pos;
-    bool filled;
-};
-
-class MapMakerNode {
-public:
-    MapMakerNode() : nh_("~"), initialized_(false) ,  q(600'000,3) {
+    OdometryNode() : nh_("~"), initialized_(false) ,  q(600'000,3) {
         // Set up ROS subscribers and publishers
-        // pointcloud_sub_ = nh_.subscribe("/velodyne_points", 10, &MapMakerNode::pointcloudCallback, this); //use when connected to Velodyne VLP-16
-        // pointcloud_sub_ = nh_.subscribe("/os1_cloud_node/points", 10, &MapMakerNode::pointcloudCallback, this); //use when connected to Ouster OS1 sensor
-        pointcloud_sub_ = nh_.subscribe("/raw_point_cloud", 10, &MapMakerNode::pointcloudCallback, this); //use with fake_lidar node
+        // pointcloud_sub_ = nh_.subscribe("/velodyne_points", 10, &OdometryNode::pointcloudCallback, this); //use when connected to Velodyne VLP-16
+        // pointcloud_sub_ = nh_.subscribe("/os1_cloud_node/points", 10, &OdometryNode::pointcloudCallback, this); //use when connected to Ouster OS1 sensor
+        pointcloud_sub_ = nh_.subscribe("/raw_point_cloud", 10, &OdometryNode::pointcloudCallback, this); //use with fake_lidar node
         aligned_pointcloud_pub_ = nh_.advertise<sensor_msgs::PointCloud2>("/hd_map", 1);
         snail_trail_pub_ = nh_.advertise<sensor_msgs::PointCloud2>("/snail_trail_topic", 1);
 
@@ -195,25 +156,12 @@ public:
         broadcaster_.sendTransform(transformStamped);
 
         //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        // Create a header for the ROS message
+        // Publish msg containing transform estimates
         std_msgs::Header header; 
         header.stamp = ros::Time::now(); //use current timestamp 
         // header.stamp = msg->header.stamp; //use lidar scan timestamp --> issues with using rosbag data?
-        header.frame_id = "map";  // Set frame ID
-        // sensor_msgs::PointCloud2 rosPointCloud = convertEigenToROS(prev_pcl_matrix, header);
-        sensor_msgs::PointCloud2 rosPointCloud = convertEigenToROS(mapPC, header);
-        aligned_pointcloud_pub_.publish(rosPointCloud);
 
-        //update snail trail
-        snailTrail = (snailTrail * rot_mat.inverse()).rowwise() - trans;
-        Eigen::VectorXf new_row(3);
-        new_row << 0., 0., 0.;
-        int currentRows = snailTrail.rows();
-        snailTrail.conservativeResize(currentRows + 1, Eigen::NoChange);
-        snailTrail.row(currentRows) = new_row;
-
-        sensor_msgs::PointCloud2 snailPC = convertEigenToROS(snailTrail, header);
-        snail_trail_pub_.publish(snailPC);
+        //TODO: figure out how to do custom msg stuff here...
 
         auto after1 = std::chrono::system_clock::now();
         auto after1Ms = std::chrono::time_point_cast<std::chrono::milliseconds>(after1);
@@ -236,7 +184,6 @@ private:
     Eigen::MatrixXf snailTrail;
     Eigen::MatrixXf prev_pcl_matrix;
     Eigen::MatrixXf mapPC;
-    EigenQueue q;
     std::random_device rd; //init for RNG
     std::mt19937 gen;      
 
@@ -272,8 +219,8 @@ private:
 };
 
 int main(int argc, char** argv) {
-    ros::init(argc, argv, "simple_map_maker_node");
-    MapMakerNode simple_map_maker_node;
+    ros::init(argc, argv, "odometry_node");
+    OdometryNode odometry_node;
     ros::spin();
     return 0;
 }

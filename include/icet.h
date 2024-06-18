@@ -78,6 +78,7 @@ public:
     Eigen::MatrixXf testPoints;
     Eigen::MatrixXf HTWH_i;
     Eigen::MatrixXf HTWdz_i; 
+    Eigen::VectorXf pred_stds;
 
     CovarianceMap sigma1;
     CovarianceMap sigma2;

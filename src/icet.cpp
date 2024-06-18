@@ -39,6 +39,8 @@ ICET::ICET(MatrixXf& scan1, MatrixXf& scan2, int runlen, Eigen::VectorXf X0,
     points2_OG = points2;
     HTWH_i.resize(6,6);
     HTWdz_i.resize(6,1);
+    pred_stds = Eigen::VectorXf(6);
+    pred_stds.setZero();
 
     clusterBounds.resize(numBinsPhi*numBinsTheta,6);
     testPoints.resize(numBinsPhi*numBinsTheta*6,3);
@@ -398,7 +400,17 @@ void ICET::fitScan2(){
     //fit gaussians (thread pool)
     parallelFitCells2(pointIndices1, pointIndices2, numBinsPhi, numBinsTheta);
 
+    //update noise matrix
+    Eigen::CompleteOrthogonalDecomposition<Eigen::MatrixXf> temp(HTWH_i);
+    Eigen::MatrixXf noise_mat = temp.pseudoInverse();
+    pred_stds[0] = sqrt(abs(noise_mat(0,0)));
+    pred_stds[1] = sqrt(abs(noise_mat(1,1)));
+    pred_stds[2] = sqrt(abs(noise_mat(2,2)));
+    pred_stds[3] = sqrt(abs(noise_mat(3,3)));
+    pred_stds[4] = sqrt(abs(noise_mat(4,4)));
+    pred_stds[5] = sqrt(abs(noise_mat(5,5)));
     // //Check condition for HTWH to suppress globally ambiguous components ~~~~~~~~~~~
+
     auto result = checkCondition(HTWH_i);
     MatrixXf L2 = get<0>(result);
     MatrixXf lam = get<1>(result);
@@ -446,9 +458,21 @@ tuple<MatrixXf, MatrixXf, MatrixXf> ICET::checkCondition(MatrixXf HTWH){
     MatrixXf L2(6,6);
     L2.setIdentity();
 
-    //chop off the top row of the eye matrix unit condition drops below desired threshold
+    //chop off the top row of the eye matrix until condition drops below desired threshold
     int eyecount = 1;
     while (std::abs(condition) > cutoff){
+
+        // ~~~~~~~~~~~~~ For easier integration with ROS odometry msg types ~~~~~~~~~~~~~~~~~~~~~~~
+        // inflate axis in solution that correspond to conditioning issues in intverting matrix
+        //   (TODO: project this properly across 6 dimensions instead of just linearly combining components)
+        // Ex of how this currently works:
+        //   In case of long tunnel roughly aligned with Y axis:
+        //   U2.T = [[0.025, 0.95, 0.0001, 0.0001, 0.00001]
+        //           [...]]
+        //   We are inflating the y component of the pred std 
+        pred_stds += U2.transpose().row(eyecount-1);
+        //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
         L2.block(0, 0, L2.rows() - 1, L2.cols()) = L2.block(1, 0, L2.rows() - 1, L2.cols());
         L2.conservativeResize(L2.rows() - 1, Eigen::NoChange);
         condition = eigenvalues(5) / eigenvalues(eyecount);
