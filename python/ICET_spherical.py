@@ -556,13 +556,13 @@ class ICET():
 
 		#Assumes mu is always going to be inside the corresponding cell (should almost always be the case, if not, its going to fail anyways)
 		insideP_ideal, nptsP_ideal = self.get_points_in_cluster(self.c2s(tf.reshape(mu_repeated, [-1,3])), occupied_spikes, bounds)
-		insideP_ideal = insideP_ideal.to_tensor()
+		insideP_ideal = insideP_ideal.to_tensor(default_value = -1)
 
 		#find which points in P are actually inside which cell in <cells>
 		insideP1_actual, nptsP1_actual = self.get_points_in_cluster(self.c2s(P1), occupied_spikes, bounds)
-		insideP1_actual = insideP1_actual.to_tensor(shape = tf.shape(insideP_ideal)) #force to be same size as insideP_ideal
+		insideP1_actual = insideP1_actual.to_tensor(shape = tf.shape(insideP_ideal), default_value = -1) #force to be same size as insideP_ideal
 		insideP2_actual, nptsP2_actual = self.get_points_in_cluster(self.c2s(P2), occupied_spikes, bounds)
-		insideP2_actual = insideP2_actual.to_tensor(shape = tf.shape(insideP_ideal))
+		insideP2_actual = insideP2_actual.to_tensor(shape = tf.shape(insideP_ideal), default_value = -1)
 
 		#compare the points inside each cell to how many there are supposed to be
 		#	(any mismatch signifies an overly extended direction)
