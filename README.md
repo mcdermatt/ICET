@@ -38,7 +38,7 @@ source ~/catkin_ws/devel/setup.bash
 rosbag play my_bag.bag
 ```
 
-A real time odometry and mapping demo can be run with the following node in another terminal:
+A real time mapping demo can be run with the following node in another terminal:
 ```
 source ~/catkin_ws/devel/setup.bash
 rosrun icet map_maker_node
@@ -48,10 +48,10 @@ HD Maps are published as PointCloud2 messages in the "/hd_map" topic which can b
 
 A "snail trail" showing the trajectory of the vehicle is also published as a PointCloud2 message "/snail_trail"
 
-Changes in pose between subsequent scans are broadcast as ROS Transforms and can be viewed with:
+Alternatively, an odometry node can be run with the following command, which outputs transforms and the accurate error bounds to a standard odometry message: 
 
 ```
-rostopic echo /tf
+rosrun icet odometry_node
 ```
 
 ## Benchmarking
