@@ -117,7 +117,7 @@ add_message_files(
 catkin_package(
  INCLUDE_DIRS include
  LIBRARIES icet
- CATKIN_DEPENDS rospy rpscpp std_msgs tf2 tf2_ros message_runtime
+ CATKIN_DEPENDS rospy roscpp std_msgs tf2 tf2_ros message_runtime
  DEPENDS system_lib
 )
 
@@ -175,7 +175,7 @@ include_directories(
 #   ${catkin_LIBRARIES}
 #   ${PCL_LIBRARIES}
 # )
-# add_definitions(${PCL_DEFINITIONS})
+add_definitions(${PCL_DEFINITIONS})
 
 # add_executable(scan_matcher_node 
 #                 src/scanMatcher.cpp 

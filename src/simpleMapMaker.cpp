@@ -36,8 +36,8 @@ public:
         for (int i = 0; i < newScan.rows(); i++){
             enqueue(newScan.row(i));
         }
-        // matrix = (matrix * rot_mat.inverse()).rowwise() - trans;
-        matrix = (matrix.rowwise() - trans) * rot_mat.inverse();
+        // matrix = (matrix * rot_mat.inverse()).rowwise() - trans; //test
+        matrix = (matrix.rowwise() - trans) * rot_mat.inverse(); //old
     }
 
     Eigen::MatrixXf getQueue() const {
@@ -61,9 +61,9 @@ class MapMakerNode {
 public:
     MapMakerNode() : nh_("~"), initialized_(false) ,  q(600'000,3) {
         // Set up ROS subscribers and publishers
-        // pointcloud_sub_ = nh_.subscribe("/velodyne_points", 10, &MapMakerNode::pointcloudCallback, this); //use when connected to Velodyne VLP-16
+        pointcloud_sub_ = nh_.subscribe("/velodyne_points", 10, &MapMakerNode::pointcloudCallback, this); //use when connected to Velodyne VLP-16
         // pointcloud_sub_ = nh_.subscribe("/os1_cloud_node/points", 10, &MapMakerNode::pointcloudCallback, this); //use when connected to Ouster OS1 sensor
-        pointcloud_sub_ = nh_.subscribe("/raw_point_cloud", 10, &MapMakerNode::pointcloudCallback, this); //use with fake_lidar node
+        // pointcloud_sub_ = nh_.subscribe("/raw_point_cloud", 10, &MapMakerNode::pointcloudCallback, this); //use with fake_lidar node
         aligned_pointcloud_pub_ = nh_.advertise<sensor_msgs::PointCloud2>("/hd_map", 1);
         snail_trail_pub_ = nh_.advertise<sensor_msgs::PointCloud2>("/snail_trail_topic", 1);
 
@@ -112,14 +112,14 @@ public:
         // RUN UPDATED ICET CODE~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         int run_length = 7;
         int numBinsPhi = 24;
-        int numBinsTheta = 75; 
+        int numBinsTheta = 100; 
         ICET it(prev_pcl_matrix, pcl_matrix, run_length, X0, numBinsPhi, numBinsTheta);
         Eigen::VectorXf X = it.X;
         cout << "soln: " << endl << X << endl;
         cout << "1-sigma error bounds:" << endl << it.pred_stds << endl;
         //seed initial estimate for next iteration
-        // X0 << 0., 0., 0., 0., 0., 0.; 
-        X0 << X[0], X[1], X[2], X[3], X[4], X[5]; 
+        X0 << 0., 0., 0., 0., 0., 0.; 
+        // X0 << X[0], X[1], X[2], X[3], X[4], X[5]; 
         //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
         // Convert back to ROS PointCloud2 and publish the aligned point cloud
@@ -133,7 +133,7 @@ public:
         // q.add_new_scan(pcl_matrix, trans, rot_mat);
 
         //downsample pcl_matrix before passing to map queue
-        int downsampleSize = 10'000;
+        int downsampleSize = 5'000; //10'000
         std::size_t originalSize = pcl_matrix.rows();
         std::vector<std::size_t> indices(originalSize);
         std::iota(indices.begin(), indices.end(), 0);
