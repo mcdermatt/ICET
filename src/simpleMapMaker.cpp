@@ -80,7 +80,7 @@ public:
         frameCount++;
 
         // Convert PointCloud2 to PCL PointCloud
-        pcl::PointCloud<pcl::PointXYZ>::Ptr pcl_cloud(new pcl::PointCloud<pcl::PointXYZ>);
+        boost::shared_ptr<pcl::PointCloud<pcl::PointXYZ>> pcl_cloud(new pcl::PointCloud<pcl::PointXYZ>());
         pcl::fromROSMsg(*msg, *pcl_cloud);
 
         if (!initialized_) {
@@ -95,7 +95,7 @@ public:
         Eigen::MatrixXf pcl_matrix = convertPCLtoEigen(pcl_cloud);
 
         // Filter out points less than distance 'd' from the origin
-        float minD = 2.;
+        float minD = 0.2;
         vector<int> not_too_close_idxs;
         for (int i = 0; i < pcl_matrix.rows(); i++){
             float distance = pcl_matrix.row(i).norm();
@@ -112,7 +112,7 @@ public:
         // RUN UPDATED ICET CODE~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         int run_length = 7;
         int numBinsPhi = 24;
-        int numBinsTheta = 100; 
+        int numBinsTheta = 75; 
         ICET it(prev_pcl_matrix, pcl_matrix, run_length, X0, numBinsPhi, numBinsTheta);
         Eigen::VectorXf X = it.X;
         cout << "soln: " << endl << X << endl;
@@ -133,7 +133,7 @@ public:
         // q.add_new_scan(pcl_matrix, trans, rot_mat);
 
         //downsample pcl_matrix before passing to map queue
-        int downsampleSize = 5'000; //10'000
+        int downsampleSize = 2'000; //10'000
         std::size_t originalSize = pcl_matrix.rows();
         std::vector<std::size_t> indices(originalSize);
         std::iota(indices.begin(), indices.end(), 0);
@@ -163,24 +163,24 @@ public:
 
         // Set the frame IDs
         transformStamped.header.frame_id = "map";         // Parent frame 
-        // transformStamped.child_frame_id = "velodyne";     // Child frame
+        transformStamped.child_frame_id = "velodyne";     // Child frame
         // transformStamped.child_frame_id = "/os1_lidar";     // Child frame
-        transformStamped.child_frame_id = "sensor";     // Child frame
+        // transformStamped.child_frame_id = "sensor";     // Child frame
 
         // Convert Eigen rotation matrix to quaternion
-        Eigen::Matrix3f rotationMatrix = rot_mat.topLeftCorner(3, 3); //X_i
-        // Eigen::Matrix3f rotationMatrix = X_homo.topLeftCorner(3, 3); //X
+        // Eigen::Matrix3f rotationMatrix = rot_mat.topLeftCorner(3, 3); //X_i
+        Eigen::Matrix3f rotationMatrix = X_homo.topLeftCorner(3, 3); //X
         Eigen::Quaternionf quaternion(rotationMatrix);
 
         // Set the translation and rotation in the transform message
         //X_i
-        transformStamped.transform.translation.x = trans(0);
-        transformStamped.transform.translation.y = trans(1);
-        transformStamped.transform.translation.z = trans(2);
-        // // X
-        // transformStamped.transform.translation.x = X_homo(0,3);
-        // transformStamped.transform.translation.y = X_homo(1,3);
-        // transformStamped.transform.translation.z = X_homo(2,3);
+        // transformStamped.transform.translation.x = trans(0);
+        // transformStamped.transform.translation.y = trans(1);
+        // transformStamped.transform.translation.z = trans(2);
+        // X
+        transformStamped.transform.translation.x = X_homo(0,3);
+        transformStamped.transform.translation.y = X_homo(1,3);
+        transformStamped.transform.translation.z = X_homo(2,3);
         transformStamped.transform.rotation.x = quaternion.x();
         transformStamped.transform.rotation.y = quaternion.y();
         transformStamped.transform.rotation.z = quaternion.z();
