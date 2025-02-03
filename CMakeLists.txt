@@ -1,6 +1,9 @@
 cmake_minimum_required(VERSION 3.0.2)
 project(icet)
 
+# Add this line to define the alignment for Eigen
+add_definitions(-DEIGEN_ALIGN_16)
+
 find_package(catkin REQUIRED COMPONENTS
   rospy
   roscpp
@@ -33,6 +36,8 @@ catkin_package(
 
 # Set optimization flags
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -march=native")
+# set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O2 -march=native")
+# set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O2 -fno-tree-vectorize -fno-inline") #Test for debugging--way too slow
 
 #NEW -- add library to allow other packages to use ICET stuff-------
 add_library(icet
@@ -69,6 +74,7 @@ target_link_libraries(map_maker_node
   ${catkin_LIBRARIES}
   ${PCL_LIBRARIES}
   tbb
+  icet #link to icet library instead of recompiling
 )
 
 
@@ -81,4 +87,5 @@ target_link_libraries(odometry_node
   ${catkin_LIBRARIES}
   ${PCL_LIBRARIES}
   tbb
+  icet
 )

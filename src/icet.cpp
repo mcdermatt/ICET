@@ -26,15 +26,14 @@
 using namespace Eigen;
 using namespace std;
 
-// Constructor implementation
 ICET::ICET(MatrixXf& scan1, MatrixXf& scan2, int runlen, Eigen::VectorXf X0,
            int num_bins_phi, int num_bins_theta) : points1(scan1), points2(scan2), rl(runlen), X(X0), 
            numBinsPhi(num_bins_phi), numBinsTheta(num_bins_theta), pool(4) {
 
     // init hyperparameters for spherical voxels
     n = 25; //50; // min size of the cluster
-    thresh = 0.3; // 0.1 indoor, 0.3 outdoor; // Jump threshold for beginning and ending radial clusters
-    buff = 0.5; // 0.1 indoor, outdoor 0.5; //buffer to add to inner and outer cluster range (helps attract nearby distributions)
+    thresh = 0.1; // 0.1 indoor, 0.3 outdoor; // Jump threshold for beginning and ending radial clusters
+    buff = 0.1; // 0.1 indoor, outdoor 0.5; //buffer to add to inner and outer cluster range (helps attract nearby distributions)
 
     points2_OG = points2;
     HTWH_i.resize(6,6);
@@ -42,8 +41,23 @@ ICET::ICET(MatrixXf& scan1, MatrixXf& scan2, int runlen, Eigen::VectorXf X0,
     pred_stds = Eigen::VectorXf(6);
     pred_stds.setZero();
 
-    clusterBounds.resize(numBinsPhi*numBinsTheta,6);
+    // clusterBounds.resize(numBinsPhi*numBinsTheta,6); // leading to segfaults when running ICET library in woodhouse
+    clusterBounds = Eigen::MatrixXf::Zero(numBinsPhi * numBinsTheta, 6);
     testPoints.resize(numBinsPhi*numBinsTheta*6,3);
+
+    clusterBounds = clusterBounds.eval();  // Ensures memory is allocated before access
+
+    // cout << "ICET object address: " << this << endl;
+    // cout << "clusterBounds address: " << &clusterBounds << endl;
+
+    // cout << "clusterBounds size: " << clusterBounds.rows() << " x " << clusterBounds.cols() << endl;
+    // cout << "First row: " << clusterBounds.row(0) << endl;
+    // cout << "Last row: " << clusterBounds.row(clusterBounds.rows() - 1) << endl;
+
+    // //not working here hmmmm
+    // cout << "attempting to index clusterBounds row " << 10 << " at very beginning. Has total rows: " << clusterBounds.rows() << endl;
+    // cout << clusterBounds.row(10) << endl;
+
 
     fitScan1();
     prepScan2();
@@ -66,20 +80,10 @@ ICET::ICET(MatrixXf& scan1, MatrixXf& scan2, int runlen, Eigen::VectorXf X0,
 }
 
 ICET::~ICET() {
-    // Destructor implementation
 }
 
 void ICET::fitScan1(){
-
-    // auto beforesort = std::chrono::system_clock::now();
-    // auto beforesortms = std::chrono::time_point_cast<std::chrono::milliseconds>(beforesort);
-
     points1Spherical = utils::cartesianToSpherical(points1);
-
-    // auto aftersort = std::chrono::system_clock::now();
-    // auto aftersortms = std::chrono::time_point_cast<std::chrono::milliseconds>(aftersort);
-    // auto ets = std::chrono::duration_cast<std::chrono::milliseconds>(aftersortms - beforesortms).count();
-    // std::cout << "c2s took: " << ets << " ms" << std::endl;
 
     // Sort sphericalCoords based on radial distance
     vector<int> index(points1Spherical.rows());
@@ -127,12 +131,18 @@ void ICET::fitCells1(const vector<int>& indices, int theta, int phi){
     // only calculate inner/outer bounds if there are a sufficient number of points in the spike 
     if (indices.size() >= n) {
 
+        // cout << "enough points with theta: " << theta << " phi: " << phi << endl;
+
         // Use the indices to access the corresponding rows in sortedPointsSpherical
         MatrixXf selectedPoints = MatrixXf::Zero(indices.size(), points1Spherical.cols());
         for (int i = 0; i < indices.size(); ++i) { 
             selectedPoints.row(i) = points1Spherical.row(indices[i]);
             // cout << i;
         }
+
+        // cout << selectedPoints << endl;
+        // cout << "attempting to index clusterBounds row " << numBinsTheta*phi + theta << " before findCluster runs. Has total rows: " << clusterBounds.rows() << endl;
+        // cout << clusterBounds.row(numBinsTheta*phi + theta) << endl;
 
         // find inner and outer bounds for each theta/phi bin
         pair<float, float> clusterDistances = findCluster(selectedPoints, n, thresh, buff);
@@ -144,11 +154,24 @@ void ICET::fitCells1(const vector<int>& indices, int theta, int phi){
         float azimMax_i =  (static_cast<float>(theta+1) / numBinsTheta) * (2 * M_PI) ;
         float elevMin_i =  (static_cast<float>(phi) / numBinsPhi) * (M_PI) ;
         float elevMax_i =  (static_cast<float>(phi+1) / numBinsPhi) * (M_PI) ;
+
+        // cout << azimMin_i << " " << azimMax_i << " " << elevMin_i << " " << elevMax_i << " " << innerDistance << " " << outerDistance << endl;
+        // cout << "Row 0: " << clusterBounds.row(0) << endl;
+        // cout << "Row 1799: " << clusterBounds.row(clusterBounds.rows() - 1) << endl;
+        // cout << "attempting to index clusterBounds row " << numBinsTheta*phi + theta << " which has total rows: " << clusterBounds.rows() << endl;
+        // cout << clusterBounds.row(numBinsTheta*phi + theta) << endl;
+        // cout << "success" << endl;
+
         //hold on to these values
         clusterBounds.row(numBinsTheta*phi + theta) << azimMin_i, azimMax_i, elevMin_i, elevMax_i, innerDistance, outerDistance;
 
         // find points from first scan inside voxel bounds and fit gaussians to each cluster
+        // cout << "about to filter" << endl;
+        // cout << clusterBounds.row(numBinsTheta*phi + theta) << endl;
+
         MatrixXf filteredPoints = filterPointsInsideCluster(selectedPoints, clusterBounds.row(numBinsTheta*phi + theta));
+        // cout << "filtered" << endl;
+
         if (outerDistance > 0.1 && filteredPoints.size() >= n){
             MatrixXf filteredPointsCart = utils::sphericalToCartesian(filteredPoints);
             Eigen::VectorXf mean = filteredPointsCart.colwise().mean();
@@ -381,24 +404,24 @@ void ICET::fitScan2(){
     points2Spherical = utils::cartesianToSpherical(points2);
     pointIndices2 = sortSphericalCoordinates(points2Spherical); 
 
-    // //fit gaussians (single thread)
-    // for (int phi = 0; phi < numBinsPhi; phi++){
-    //     for (int theta = 0; theta< numBinsTheta; theta++){
-    //         // Retrieve the point indices inside angular bin
-    //         const vector<int>& indices1 = pointIndices1[theta][phi];
-    //         const vector<int>& indices2 = pointIndices2[theta][phi];
+    //fit gaussians (single thread)
+    for (int phi = 0; phi < numBinsPhi; phi++){
+        for (int theta = 0; theta< numBinsTheta; theta++){
+            // Retrieve the point indices inside angular bin
+            const vector<int>& indices1 = pointIndices1[theta][phi];
+            const vector<int>& indices2 = pointIndices2[theta][phi];
 
-    //         //get cell j's contribution to HTWH and HTWdz for iteration i
-    //         std::tuple<Eigen::MatrixXf, Eigen::MatrixXf> result = fitCells2(indices1, indices2, theta, phi);
-    //         Eigen::MatrixXf HTWH_j = std::get<0>(result);
-    //         Eigen::MatrixXf HTWdz_j = std::get<1>(result);
-    //         HTWH_i += HTWH_j;
-    //         HTWdz_i += HTWdz_j;
-    //     }
-    // }
+            //get cell j's contribution to HTWH and HTWdz for iteration i
+            std::tuple<Eigen::MatrixXf, Eigen::MatrixXf> result = fitCells2(indices1, indices2, theta, phi);
+            Eigen::MatrixXf HTWH_j = std::get<0>(result);
+            Eigen::MatrixXf HTWdz_j = std::get<1>(result);
+            HTWH_i += HTWH_j;
+            HTWdz_i += HTWdz_j;
+        }
+    }
 
     //fit gaussians (thread pool)
-    parallelFitCells2(pointIndices1, pointIndices2, numBinsPhi, numBinsTheta);
+    // parallelFitCells2(pointIndices1, pointIndices2, numBinsPhi, numBinsTheta);
 
     //update noise matrix
     Eigen::CompleteOrthogonalDecomposition<Eigen::MatrixXf> temp(HTWH_i);
@@ -409,8 +432,8 @@ void ICET::fitScan2(){
     pred_stds[3] = sqrt(abs(noise_mat(3,3)));
     pred_stds[4] = sqrt(abs(noise_mat(4,4)));
     pred_stds[5] = sqrt(abs(noise_mat(5,5)));
-    // //Check condition for HTWH to suppress globally ambiguous components ~~~~~~~~~~~
 
+    // //Check condition for HTWH to suppress globally ambiguous components ~~~~~~~~~~~
     auto result = checkCondition(HTWH_i);
     MatrixXf L2 = get<0>(result);
     MatrixXf lam = get<1>(result);
@@ -547,15 +570,20 @@ vector<vector<vector<int>>> ICET::sortSphericalCoordinates(Eigen::MatrixXf spher
     return pointIndices;
 }
 
+//TODO-- memory issues likely created in this function
 pair<float, float> ICET::findCluster(const MatrixXf& sphericalCoords, int n, float thresh, float buff) {
     int numPoints = sphericalCoords.rows();
 
     float innerDistance = 0.0;
     float outerDistance = 0.0;
     vector<Vector3f> localPoints;
+    localPoints.reserve(numPoints);
 
     for (int i = 0; i < numPoints; i++) {
-        Vector3f point = sphericalCoords.row(i);
+        // cout << "before ";
+        Vector3f point = sphericalCoords.row(i); //old
+        // Vector3f point = sphericalCoords.row(i).transpose(); //test
+        // cout << " after" << endl;
 
         // Check if the point is within the threshold of the last point
         if (!localPoints.empty() && std::abs(localPoints.back()(0) - point(0)) <= thresh) {
@@ -581,7 +609,7 @@ pair<float, float> ICET::findCluster(const MatrixXf& sphericalCoords, int n, flo
     if (localPoints.size() >= n) {
         // innerDistance = localPoints.front()(0);
         // outerDistance = localPoints.back()(0);
-        if (localPoints.front()(0) !=0){
+        if (!localPoints.empty() && localPoints.front()(0) !=0){
             innerDistance = localPoints.front()(0) - buff;
             outerDistance = localPoints.back()(0) + buff;
             // cout << "Found cluster - Inner Distance: " << innerDistance << ", Outer Distance: " << outerDistance << endl;

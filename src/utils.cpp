@@ -94,31 +94,6 @@ namespace utils{
         // Ensure that the input matrix has 3 columns (X, Y, Z coordinates)
         assert(cartesianPoints.cols() == 3);
 
-        // MatrixXf spherical_coords(cartesianPoints.rows(), 3);
-
-        // // Extract x, y, z components
-        // ArrayXf x = cartesianPoints.col(0).array();
-        // ArrayXf y = cartesianPoints.col(1).array();
-        // ArrayXf z = cartesianPoints.col(2).array();
-
-        // // Compute r
-        // ArrayXf r = (x.square() + y.square() + z.square()).sqrt();
-
-        // // Compute theta (atan2(y, x)), ensuring it's in the range [0, 2pi)
-        // ArrayXf theta = y.binaryExpr(x, [](float yi, float xi) { return std::atan2(yi, xi); });
-        // theta = theta.unaryExpr([](float angle) { return angle < 0.0f ? angle + 2.0f * float(M_PI) : angle; });
-
-        // // Compute phi (acos(z / r)), guard against division by zero
-        // ArrayXf phi = (z / r).min(1.0f).max(-1.0f);  // clamp the values to [-1, 1] to avoid domain errors
-        // phi = phi.unaryExpr([](float ratio) { return std::acos(ratio); });
-
-        // // Assign to spherical_coords
-        // spherical_coords.col(0) = r.matrix();
-        // spherical_coords.col(1) = theta.matrix();
-        // spherical_coords.col(2) = phi.matrix();
-
-        // return spherical_coords;
-
         // Compute norms (radial distance)
         VectorXf r = cartesianPoints.rowwise().norm();
 
@@ -141,42 +116,6 @@ namespace utils{
         sphericalPoints = (sphericalPoints.array().isNaN()).select(1000.0, sphericalPoints);
 
         return sphericalPoints;
-
-        // VectorXf x = cartesianPoints.col(0);
-        // VectorXf y = cartesianPoints.col(1);
-        // VectorXf z = cartesianPoints.col(2);
-        // VectorXf r = cartesianPoints.rowwise().norm();
-
-        // // Compute azimuthal angle (theta)
-        // VectorXf theta = VectorXf::Zero(cartesianPoints.rows());
-        // for (int i = 0; i < cartesianPoints.rows(); ++i) {
-        //     theta(i) = std::atan2(y(i), x(i));
-        //     if (theta(i) < 0.0) {
-        //         theta(i) += 2.0 * M_PI;
-        //     }
-        // }
-
-        // // Compute elevation angle (phi)
-        // VectorXf phi = VectorXf::Zero(cartesianPoints.rows());
-        // for (int i = 0; i < cartesianPoints.rows(); ++i) {
-        //     phi(i) = std::acos(z(i) / r(i));
-        //     // std::cout << "phi(i): \n" << phi(i) << "\n";
-        // }
-
-        // // Combine r, theta, phi into a new matrix
-        // MatrixXf sphericalPoints(cartesianPoints.rows(), 3);
-        // sphericalPoints << r, theta, phi;
-
-        // // Replace NaN or -NaN values with [0, 0, 0]
-        // for (int i = 0; i < sphericalPoints.rows(); ++i) {
-        //     for (int j = 0; j < sphericalPoints.cols(); ++j) {
-        //         if (std::isnan(sphericalPoints(i, j))) {
-        //             sphericalPoints(i, j) = 1000.0;
-        //         }
-        //     }
-        // }
-
-        // return sphericalPoints;
     }
 
     Eigen::MatrixXf sphericalToCartesian(const Eigen::MatrixXf& sphericalPoints) {
