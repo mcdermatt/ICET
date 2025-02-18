@@ -24,9 +24,9 @@ class ICET():
 
 		self.st = time.time() #start time (for debug)
 
-		self.min_cell_distance = 2 #begin closest spherical voxel here
+		self.min_cell_distance = 0.2 #begin closest spherical voxel here
 		#ignore "occupied" cells with fewer than this number of pts
-		self.min_num_pts = 100 #was 50 for KITTI and Ford, need to lower to 25 for CODD 
+		self.min_num_pts = 25 #was 50 for KITTI and Ford, need to lower to 25 for CODD 
 		self.fid = fid # dimension of 3D grid: [fid, fid, fid]
 		self.draw = draw
 		self.niter = niter

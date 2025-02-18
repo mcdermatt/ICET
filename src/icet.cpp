@@ -27,13 +27,8 @@ using namespace Eigen;
 using namespace std;
 
 ICET::ICET(MatrixXf& scan1, MatrixXf& scan2, int runlen, Eigen::VectorXf X0,
-           int num_bins_phi, int num_bins_theta) : points1(scan1), points2(scan2), rl(runlen), X(X0), 
-           numBinsPhi(num_bins_phi), numBinsTheta(num_bins_theta), pool(4) {
-
-    // init hyperparameters for spherical voxels
-    n = 25; //50; // min size of the cluster
-    thresh = 0.1; // 0.1 indoor, 0.3 outdoor; // Jump threshold for beginning and ending radial clusters
-    buff = 0.1; // 0.1 indoor, outdoor 0.5; //buffer to add to inner and outer cluster range (helps attract nearby distributions)
+           int num_bins_phi, int num_bins_theta, int n, float thresh, float buff) : points1(scan1), points2(scan2), rl(runlen), X(X0), 
+           numBinsPhi(num_bins_phi), numBinsTheta(num_bins_theta), n(n), thresh(thresh), buff(buff), pool(4) {
 
     points2_OG = points2;
     HTWH_i.resize(6,6);
@@ -46,18 +41,6 @@ ICET::ICET(MatrixXf& scan1, MatrixXf& scan2, int runlen, Eigen::VectorXf X0,
     testPoints.resize(numBinsPhi*numBinsTheta*6,3);
 
     clusterBounds = clusterBounds.eval();  // Ensures memory is allocated before access
-
-    // cout << "ICET object address: " << this << endl;
-    // cout << "clusterBounds address: " << &clusterBounds << endl;
-
-    // cout << "clusterBounds size: " << clusterBounds.rows() << " x " << clusterBounds.cols() << endl;
-    // cout << "First row: " << clusterBounds.row(0) << endl;
-    // cout << "Last row: " << clusterBounds.row(clusterBounds.rows() - 1) << endl;
-
-    // //not working here hmmmm
-    // cout << "attempting to index clusterBounds row " << 10 << " at very beginning. Has total rows: " << clusterBounds.rows() << endl;
-    // cout << clusterBounds.row(10) << endl;
-
 
     fitScan1();
     prepScan2();

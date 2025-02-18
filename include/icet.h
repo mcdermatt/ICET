@@ -28,10 +28,16 @@ using CovarianceMatrix = Eigen::Matrix<float, 3, 3>;
 using CovarianceMap = std::map<int, std::map<int, CovarianceMatrix>>;
 using MeanMap = std::map<int, std::map<int, Eigen::Vector3f>>;
 
+// // init hyperparameters for spherical voxels
+// n = 25; //50; // min size of the cluster
+// thresh = 0.1; // 0.1 indoor, 0.3 outdoor; // Jump threshold for beginning and ending radial clusters
+// buff = 0.1; // 0.1 indoor, outdoor 0.5; //buffer to add to inner and outer cluster range (helps attract nearby distributions)
+
 class ICET{
 public:
     ICET(Eigen::MatrixXf& scan1, Eigen::MatrixXf& scan2, int runlen, 
-    Eigen::VectorXf X0, int num_bins_phi, int num_bins_theta);
+    Eigen::VectorXf X0, int num_bins_phi, int num_bins_theta, int n = 25,
+    float thresh = 0.1, float buff = 0.1);
     ~ICET();
 
     //avoid using static methods so we can run multiple ICETs at once?

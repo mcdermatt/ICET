@@ -110,10 +110,13 @@ public:
         pcl_matrix = filtered_pcl_matrix;
 
         // RUN UPDATED ICET CODE~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        int run_length = 7;
+        int run_length = 12;
         int numBinsPhi = 24;
         int numBinsTheta = 75; 
-        ICET it(prev_pcl_matrix, pcl_matrix, run_length, X0, numBinsPhi, numBinsTheta);
+        int n = 25; //min points per voxel
+        float thresh = 0.1;  // Jump threshold for beginning and ending radial clusters
+        float buff = 0.1;    //buffer to add to inner and outer cluster range (helps attract nearby distributions)
+        ICET it(prev_pcl_matrix, pcl_matrix, run_length, X0, numBinsPhi, numBinsTheta, n, thresh, buff);
         Eigen::VectorXf X = it.X;
         cout << "soln: " << endl << X << endl;
         cout << "1-sigma error bounds:" << endl << it.pred_stds << endl;
@@ -121,6 +124,17 @@ public:
         X0 << 0., 0., 0., 0., 0., 0.; 
         // X0 << X[0], X[1], X[2], X[3], X[4], X[5]; 
         //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+        //look for jumps in acceleration to prevent solution from exploding
+        if (abs(X[0]) > trans_thresh || abs(X[1]) > trans_thresh || abs(X[2]) > trans_thresh
+           || abs(X[3]) > rot_thresh || abs(X[4]) > rot_thresh || abs(X[5]) > rot_thresh){
+            X[0] = 0;
+            X[1] = 0;
+            X[2] = 0;
+            X[3] = 0;
+            X[4] = 0;
+            X[5] = 0;
+        }
 
         // Convert back to ROS PointCloud2 and publish the aligned point cloud
         sensor_msgs::PointCloud2 aligned_cloud_msg;
@@ -224,6 +238,9 @@ public:
     Eigen::VectorXf X0;
 
 private:
+    float rot_thresh = 0.3; // denote registration as diverged if we rotate more than this amount between subsequent frames
+    float trans_thresh = 0.3; // or translate this amount between frames
+
     ros::NodeHandle nh_;
     ros::Subscriber pointcloud_sub_;
     ros::Publisher snail_trail_pub_;
