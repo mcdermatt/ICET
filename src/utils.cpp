@@ -91,52 +91,48 @@ namespace utils{
     }
 
     MatrixXf cartesianToSpherical(const MatrixXf& cartesianPoints){
-        // Ensure that the input matrix has 3 columns (X, Y, Z coordinates)
         assert(cartesianPoints.cols() == 3);
+        int N = cartesianPoints.rows();
 
-        // Compute norms (radial distance)
-        VectorXf r = cartesianPoints.rowwise().norm();
+        // Vectorized: compute all norms at once
+        Eigen::ArrayXf r = cartesianPoints.rowwise().norm().array();
 
-        // Compute azimuthal angle (theta) and elevation angle (phi)
-        VectorXf theta(cartesianPoints.rows());
-        VectorXf phi(cartesianPoints.rows());
-        for (int i = 0; i < cartesianPoints.rows(); ++i) {
-            theta(i) = std::atan2(cartesianPoints(i, 1), cartesianPoints(i, 0));
-            if (theta(i) < 0.0) {
-                theta(i) += 2.0 * M_PI;
-            }
-            phi(i) = std::acos(cartesianPoints(i, 2) / r(i));
-        }
+        // Vectorized: atan2 and acos over entire arrays
+        Eigen::ArrayXf theta = cartesianPoints.col(1).array().binaryExpr(
+            cartesianPoints.col(0).array(),
+            [](float y, float x) { return std::atan2(y, x); });
+        theta = (theta < 0.f).select(theta + 2.f * static_cast<float>(M_PI), theta);
 
-        // Combine r, theta, phi into a new matrix
-        MatrixXf sphericalPoints(cartesianPoints.rows(), 3);
-        sphericalPoints << r, theta, phi;
+        Eigen::ArrayXf phi = (cartesianPoints.col(2).array() / r).unaryExpr(
+            [](float v) { return std::acos(v); });
 
-        // Replace NaN values with a default value
+        // Combine and replace NaN
+        MatrixXf sphericalPoints(N, 3);
+        sphericalPoints.col(0) = r.matrix();
+        sphericalPoints.col(1) = theta.matrix();
+        sphericalPoints.col(2) = phi.matrix();
         sphericalPoints = (sphericalPoints.array().isNaN()).select(1000.0, sphericalPoints);
 
         return sphericalPoints;
     }
 
     Eigen::MatrixXf sphericalToCartesian(const Eigen::MatrixXf& sphericalPoints) {
-        // Ensure that the input matrix has 3 columns (r, theta, phi)
         assert(sphericalPoints.cols() == 3);
 
-        // Extract r, theta, phi columns
-        Eigen::VectorXf r = sphericalPoints.col(0);
-        Eigen::VectorXf theta = sphericalPoints.col(1);
-        Eigen::VectorXf phi = sphericalPoints.col(2);
+        // Vectorized: extract and compute all trig at once
+        Eigen::ArrayXf r = sphericalPoints.col(0).array();
+        Eigen::ArrayXf theta = sphericalPoints.col(1).array();
+        Eigen::ArrayXf phi = sphericalPoints.col(2).array();
 
-        // Convert spherical coordinates to Cartesian coordinates
+        Eigen::ArrayXf sinPhi = phi.sin();
+        Eigen::ArrayXf cosPhi = phi.cos();
+        Eigen::ArrayXf sinTheta = theta.sin();
+        Eigen::ArrayXf cosTheta = theta.cos();
+
         Eigen::MatrixXf cartesianPoints(sphericalPoints.rows(), 3);
-
-        for (int i = 0; i < sphericalPoints.rows(); ++i) {
-            float x = r(i) * sin(phi(i)) * cos(theta(i));
-            float y = r(i) * sin(phi(i)) * sin(theta(i));
-            float z = r(i) * cos(phi(i));
-
-            cartesianPoints.row(i) << x, y, z;
-        }
+        cartesianPoints.col(0) = (r * sinPhi * cosTheta).matrix();
+        cartesianPoints.col(1) = (r * sinPhi * sinTheta).matrix();
+        cartesianPoints.col(2) = (r * cosPhi).matrix();
 
         return cartesianPoints;
     }

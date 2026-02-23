@@ -4,65 +4,110 @@ This repository contains code for our Iterative Closest Ellipsoidal Transform (I
 
 ![](https://github.com/mcdermatt/ICET/blob/main/figures/demo3.gif)
 
-## Compile
+## Build
 
-Use the following commands to download and compile ICET
-```
-cd ~/catkin_ws/src
+Use the following commands to download and compile ICET in a ROS2 workspace:
+```bash
+cd ~/ros2_ws/src
 git clone https://github.com/mcdermatt/ICET
-cd ..
-catkin_make
+cd ~/ros2_ws
+colcon build --packages-select icet
+source install/setup.bash
 ```
-This package was developed and tested with ROS Noetic
+
+### Dependencies
+
+- ROS2 (tested with Jazzy)
+- `rclcpp`, `sensor_msgs`, `nav_msgs`, `geometry_msgs`
+- `tf2_ros`, `tf2_geometry_msgs`
+- `pcl_conversions`, `pcl_ros`
+- Eigen3
+
+Install missing dependencies with:
+```bash
+sudo apt-get install -y freeglut3-dev
+rosdep install --from-paths src --ignore-src -r -y
+```
 
 ## Real-time HD Map generation
 
 ![](https://github.com/mcdermatt/ICET/blob/main/figures/map1.jpg)
 
-Begin by sourcing your workspace and running a roscore
-```
-source ~/catkin_ws/devel/setup.bash
-roscore
-```
-
-The included fake_lidar node provides an interface for loading popular autonomous driving datasets from a .csv, .bin, or .npy format and publishing point cloud messages in the same format as the Velodyne VLP-32 sensor. Modify the fake_lidar.py file to point towards the correct local directory containing your dataset and run this node in a new terminal with:
-
-```
-source ~/catkin_ws/devel/setup.bash
-rosrun icet fake_lidar 
-```  
-
-Alternatively, the included package can be run directly off a ROSBAG using the following command. Make sure that the simpleMapMaker.cpp code is subscribed to the correct topic!
-```
-source ~/catkin_ws/devel/setup.bash
-rosbag play my_bag.bag
+Play a recorded bag in one terminal:
+```bash
+source ~/ros2_ws/install/setup.bash
+ros2 bag play my_bag/
 ```
 
-A real time mapping demo can be run with the following node in another terminal:
-```
-source ~/catkin_ws/devel/setup.bash
-rosrun icet map_maker_node
+Run the map maker node in another terminal:
+```bash
+source ~/ros2_ws/install/setup.bash
+ros2 run icet map_maker_node
 ```
 
-HD Maps are published as PointCloud2 messages in the "/hd_map" topic which can be viewed via RViz
+HD Maps are published as PointCloud2 messages on the `/hd_map` topic which can be viewed via RViz2.
 
-A "snail trail" showing the trajectory of the vehicle is also published as a PointCloud2 message "/snail_trail"
+A "snail trail" showing the trajectory of the vehicle is also published as a PointCloud2 message on `/snail_trail_topic`.
 
-Alternatively, an odometry node can be run with the following command, which outputs transforms and the accurate error bounds to a standard odometry message: 
+Alternatively, an odometry node can be run which outputs transforms and accurate error bounds to a standard odometry message:
 
+```bash
+ros2 run icet odometry_node
 ```
-rosrun icet odometry_node
+
+Or use the included launch file (auto-loads config YAML):
+```bash
+ros2 launch icet icet_launch.py
 ```
+
+## Configuration
+
+Algorithm parameters are loaded from `config/icet_config.yaml` at runtime — **no rebuild needed** when you change them. To load parameters when running a node directly:
+
+```bash
+ros2 run icet odometry_node --ros-args --params-file ~/ros2_ws/src/ICET/config/icet_config.yaml
+```
+
+Or with the launch file (parameters are loaded automatically):
+```bash
+ros2 launch icet icet_launch.py
+```
+
+Key parameters:
+| Parameter | Default | Description |
+|---|---|---|
+| `num_bins_phi` | 24 | Elevation voxels |
+| `num_bins_theta` | 75 | Azimuthal voxels |
+| `run_length` | 7 | ICET iterations per scan pair |
+| `min_points` | 25 | Minimum points per voxel |
+| `cluster_thresh` | 0.1 | Radial jump threshold (m) |
+| `cluster_buff` | 0.1 | Radial buffer (m) |
+| `min_distance` | 0.2 | Filter points closer than this (m) |
+| `trans_thresh` | 3.0 | Max translation per scan (m) |
+| `rot_thresh` | 0.5 | Max rotation per scan (rad) |
+
+## Real-time OpenGL Visualization
+
+An odometry node with a built-in OpenGL visualizer shows point clouds, spherical voxel bounds, and covariance ellipsoids updating in real time:
+
+```bash
+ros2 run icet odometry_viz_node --ros-args --params-file ~/ros2_ws/src/ICET/config/icet_config.yaml
+```
+
+![](https://github.com/mcdermatt/ICET/blob/main/figures/cppviz.png)
+
+Controls:
+- **Left-click drag** — rotate
+- **Middle-click drag** — pan
+- **Scroll wheel** — zoom
+- **Arrow keys** — zoom in/out
+- **Esc** — quit
 
 ## Benchmarking
 
-Runtime for scan registration is dependant on sensor resolution, computer hardware, voxel resolution, and the number of iterations the algorithm is allowed to run. In our testing, we were able to achieve a optimal registration accuracy with a mean registration time of 35ms for 64-channel data running for 7 iterations on a Ryzen 5800x CPU and with a resolution of 75 azimuthal voxels and 24 elevation voxels.   
+Runtime for scan registration is dependant on sensor resolution, computer hardware, voxel resolution, and the number of iterations the algorithm is allowed to run. In our testing, we were able to achieve a optimal registration accuracy with a mean registration time of 25ms for 64-channel data running for 7 iterations on a Ryzen 5800x CPU and with a resolution of 75 azimuthal voxels and 24 elevation voxels.   
 
-## Additional Tools
-
-An OpenGL visualizer is included which can be helpful for tuning the C++ implementation of ICET for new sensors and enviornments. Exaple use is demonstrated in the icet_cpp_demo. which is located within the /src/ directory. 
-
-![](https://github.com/mcdermatt/ICET/blob/main/figures/cppviz.png)
+Raspberry pi 5 comfortably runs at 45ms for 32-channel data with 7 iterations and a resolution of 75 azimuthal voxels and 24 elevation voxels.
 
 ## Cite ICET
 

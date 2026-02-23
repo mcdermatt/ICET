@@ -10,10 +10,8 @@
 #include <string>
 #include "csv.hpp"
 #include <fstream>
-#include <cmath>
 #include <limits>
 #include <algorithm> 
-#include <map>
 #include <execution>
 #include <chrono>
 #include <mutex>
@@ -23,15 +21,6 @@
 #include <queue>
 #include "ThreadPool.h"
 #include "utils.h"
-
-using CovarianceMatrix = Eigen::Matrix<float, 3, 3>;
-using CovarianceMap = std::map<int, std::map<int, CovarianceMatrix>>;
-using MeanMap = std::map<int, std::map<int, Eigen::Vector3f>>;
-
-// // init hyperparameters for spherical voxels
-// n = 25; //50; // min size of the cluster
-// thresh = 0.1; // 0.1 indoor, 0.3 outdoor; // Jump threshold for beginning and ending radial clusters
-// buff = 0.1; // 0.1 indoor, outdoor 0.5; //buffer to add to inner and outer cluster range (helps attract nearby distributions)
 
 class ICET{
 public:
@@ -63,9 +52,13 @@ public:
                        const std::vector<std::vector<std::vector<int>>>& pointIndices2,
                        int numBinsPhi, int numBinsTheta);
 
-    Eigen::MatrixXf get_H(Eigen::Vector3f mu, Eigen::Vector3f angs);
+    // Precomputed trig passed directly to avoid redundant sin/cos calls per voxel
+    Eigen::MatrixXf get_H(Eigen::Vector3f mu, float sp, float cp, float st, float ct, float ss, float cs);
 
     std::tuple<Eigen::MatrixXf, Eigen::MatrixXf, Eigen::MatrixXf> checkCondition(Eigen::MatrixXf HTWH);
+
+    // Helper to convert flat index
+    inline int voxelIdx(int theta, int phi) const { return theta * numBinsPhi + phi; }
 
     //algorithm params
     int rl;
@@ -86,12 +79,16 @@ public:
     Eigen::MatrixXf HTWdz_i; 
     Eigen::VectorXf pred_stds;
 
-    CovarianceMap sigma1;
-    CovarianceMap sigma2;
-    MeanMap mu1;
-    MeanMap mu2;
-    CovarianceMap L;
-    CovarianceMap U;
+    // Flat vectors indexed by voxelIdx(theta, phi) — replaces nested std::map
+    std::vector<Eigen::Matrix3f> sigma1;
+    std::vector<Eigen::Matrix3f> sigma2;
+    std::vector<Eigen::Vector3f> mu1;
+    std::vector<Eigen::Vector3f> mu2;
+    std::vector<Eigen::Matrix3f> L;
+    std::vector<Eigen::Matrix3f> U;
+    // Track which voxels have valid scan1 fits
+    std::vector<bool> voxelOccupied;
+
     std::vector<std::vector<std::vector<int>>> pointIndices1;
     std::vector<std::vector<std::vector<int>>> pointIndices2;
 

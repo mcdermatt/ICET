@@ -1,0 +1,41 @@
+# ICET Algorithm Parameters
+# Modify these at runtime without rebuilding
+
+odometry_node:
+  ros__parameters:
+    # Voxel grid resolution
+    num_bins_phi: 24        # elevation bins
+    num_bins_theta: 75      # azimuthal bins
+    # Registration
+    run_length: 7           # ICET iterations per scan pair
+    min_points: 25          # minimum points per voxel
+    cluster_thresh: 0.1     # radial jump threshold (m)
+    cluster_buff: 0.1       # radial buffer (m)
+    min_distance: 0.2       # filter points closer than this (m)
+    # Outlier rejection
+    trans_thresh: 3.0       # max translation per scan (m)
+    rot_thresh: 0.5         # max rotation per scan (rad)
+
+odometry_viz_node:
+  ros__parameters:
+    num_bins_phi: 24
+    num_bins_theta: 75
+    run_length: 7
+    min_points: 25
+    cluster_thresh: 0.1
+    cluster_buff: 0.1
+    min_distance: 0.2
+    trans_thresh: 3.0
+    rot_thresh: 0.5
+
+map_maker_node:
+  ros__parameters:
+    num_bins_phi: 24
+    num_bins_theta: 75
+    run_length: 12
+    min_points: 25
+    cluster_thresh: 0.1
+    cluster_buff: 0.1
+    min_distance: 0.2
+    trans_thresh: 3.0
+    rot_thresh: 0.5

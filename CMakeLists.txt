@@ -1,91 +1,129 @@
-cmake_minimum_required(VERSION 3.0.2)
+cmake_minimum_required(VERSION 3.8)
 project(icet)
-
-# Add this line to define the alignment for Eigen
-add_definitions(-DEIGEN_ALIGN_16)
-
-find_package(catkin REQUIRED COMPONENTS
-  rospy
-  roscpp
-  std_msgs
-  message_generation
-  nav_msgs
-  tf
-  tf2
-  tf2_ros
-)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-find_package(PCL REQUIRED COMPONENTS common io)
 
+# Optimization flags
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -march=native")
+
+# Eigen alignment
+add_definitions(-DEIGEN_ALIGN_16)
+
+# Find dependencies
+find_package(ament_cmake REQUIRED)
+find_package(rclcpp REQUIRED)
+find_package(std_msgs REQUIRED)
+find_package(sensor_msgs REQUIRED)
+find_package(nav_msgs REQUIRED)
+find_package(geometry_msgs REQUIRED)
 find_package(tf2 REQUIRED)
 find_package(tf2_ros REQUIRED)
+find_package(tf2_geometry_msgs REQUIRED)
+find_package(pcl_conversions REQUIRED)
+find_package(builtin_interfaces REQUIRED)
+find_package(rosidl_default_generators REQUIRED)
+find_package(PCL REQUIRED COMPONENTS common io)
+find_package(OpenGL REQUIRED)
+find_package(GLEW REQUIRED)
+# freeglut3-dev provides the GLUT headers/libs
+find_package(GLUT REQUIRED)
 
-## Generate messages in the 'msg' folder
-add_message_files(
-  FILES
-  Num.msg
+# Generate custom messages
+rosidl_generate_interfaces(${PROJECT_NAME}
+  "msg/Num.msg"
+  DEPENDENCIES builtin_interfaces
 )
-catkin_package(
- INCLUDE_DIRS include
- LIBRARIES icet
- CATKIN_DEPENDS rospy roscpp std_msgs tf2 tf2_ros message_runtime
- DEPENDS system_lib
+
+# Include directories
+include_directories(
+  include
+  ${PCL_INCLUDE_DIRS}
 )
+add_definitions(${PCL_DEFINITIONS})
 
-# Set optimization flags
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -march=native")
-# set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O2 -march=native")
-# set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O2 -fno-tree-vectorize -fno-inline") #Test for debugging--way too slow
-
-#NEW -- add library to allow other packages to use ICET stuff-------
-add_library(icet
-  src/icet.cpp 
+# ---- ICET core library (no ROS dependency) ----
+add_library(icet_core
+  src/icet.cpp
   src/utils.cpp
   src/ThreadPool.cpp
 )
-target_link_libraries(icet
-  ${catkin_LIBRARIES}
+target_include_directories(icet_core PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include>
+)
+target_link_libraries(icet_core
   ${PCL_LIBRARIES}
   tbb
 )
 
-# Make sure the library is exported properly
-add_dependencies(icet ${catkin_EXPORTED_TARGETS})
-#------------------------------------------------------------------
-
-## Specify additional locations of header files
-include_directories(
-  include
-  ${catkin_INCLUDE_DIRS}
-  ${PCL_INCLUDE_DIRS}
-  ${PROJECT_SOURCE_DIR}/csv-parser/single_include
+# ---- Visualization library (OpenGL) ----
+add_library(icet_viz
+  src/visualization.cpp
+)
+target_include_directories(icet_viz PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include>
+)
+target_link_libraries(icet_viz
+  OpenGL::GL
+  OpenGL::GLU
+  GLEW::GLEW
+  GLUT::GLUT
 )
 
-add_definitions(${PCL_DEFINITIONS})
-
-add_executable(map_maker_node 
-                src/simpleMapMaker.cpp 
-                src/icet.cpp 
-                src/utils.cpp
-                src/ThreadPool.cpp)
-target_link_libraries(map_maker_node
-  ${catkin_LIBRARIES}
-  ${PCL_LIBRARIES}
-  tbb
-  icet #link to icet library instead of recompiling
+# ---- Odometry Node ----
+add_executable(odometry_node src/odometry.cpp)
+target_link_libraries(odometry_node icet_core ${PCL_LIBRARIES} tbb)
+ament_target_dependencies(odometry_node
+  rclcpp sensor_msgs nav_msgs geometry_msgs
+  tf2 tf2_ros tf2_geometry_msgs pcl_conversions
 )
 
-
-add_executable(odometry_node 
-                src/odometry.cpp 
-                src/icet.cpp 
-                src/utils.cpp
-                src/ThreadPool.cpp)
-target_link_libraries(odometry_node
-  ${catkin_LIBRARIES}
-  ${PCL_LIBRARIES}
-  tbb
-  icet
+# ---- Map Maker Node ----
+add_executable(map_maker_node src/simpleMapMaker.cpp)
+target_link_libraries(map_maker_node icet_core ${PCL_LIBRARIES} tbb)
+ament_target_dependencies(map_maker_node
+  rclcpp sensor_msgs nav_msgs geometry_msgs
+  tf2 tf2_ros tf2_geometry_msgs pcl_conversions
 )
+
+# ---- Odometry + Visualization Node ----
+add_executable(odometry_viz_node src/odometryViz.cpp)
+target_link_libraries(odometry_viz_node icet_core icet_viz ${PCL_LIBRARIES} tbb)
+ament_target_dependencies(odometry_viz_node
+  rclcpp sensor_msgs nav_msgs geometry_msgs
+  tf2 tf2_ros tf2_geometry_msgs pcl_conversions
+)
+
+# Install targets
+install(TARGETS odometry_node map_maker_node odometry_viz_node
+  DESTINATION lib/${PROJECT_NAME}
+)
+
+install(TARGETS icet_core icet_viz
+  EXPORT icet_coreTargets
+  ARCHIVE DESTINATION lib
+  LIBRARY DESTINATION lib
+  RUNTIME DESTINATION bin
+)
+
+install(DIRECTORY include/
+  DESTINATION include
+)
+
+install(DIRECTORY launch/
+  DESTINATION share/${PROJECT_NAME}/launch
+)
+
+install(DIRECTORY config/
+  DESTINATION share/${PROJECT_NAME}/config
+)
+
+# Export
+ament_export_targets(icet_coreTargets HAS_LIBRARY_TARGET)
+ament_export_include_directories(include)
+ament_export_libraries(icet_core icet_viz)
+ament_export_dependencies(PCL)
+
+ament_package()

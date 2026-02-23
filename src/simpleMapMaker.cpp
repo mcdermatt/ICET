@@ -1,13 +1,14 @@
-#include <ros/ros.h>
-#include <sensor_msgs/PointCloud2.h>
+#include <rclcpp/rclcpp.hpp>
+#include <sensor_msgs/msg/point_cloud2.hpp>
+#include <std_msgs/msg/header.hpp>
 #include <pcl_conversions/pcl_conversions.h>
 #include <pcl/point_cloud.h>
 #include <pcl/point_types.h>
 #include <tf2_ros/transform_broadcaster.h>
-#include <tf2_ros/buffer.h>  // Add this line for tf2_ros::Buffer
 #include <pcl/registration/icp.h>
 #include <Eigen/Dense>
 #include <random>
+#include <geometry_msgs/msg/transform_stamped.hpp>
 #include "icet.h"
 #include "utils.h"
 
@@ -57,15 +58,29 @@ private:
     bool filled;
 };
 
-class MapMakerNode {
+class MapMakerNode : public rclcpp::Node {
 public:
-    MapMakerNode() : nh_("~"), initialized_(false) ,  q(600'000,3) {
+    MapMakerNode() : Node("map_maker_node"), initialized_(false), q(600'000, 3), gen(rd()) {
+        // Declare parameters (loaded from config YAML at runtime)
+        this->declare_parameter("num_bins_phi", 24);
+        this->declare_parameter("num_bins_theta", 75);
+        this->declare_parameter("run_length", 12);
+        this->declare_parameter("min_points", 25);
+        this->declare_parameter("cluster_thresh", 0.1);
+        this->declare_parameter("cluster_buff", 0.1);
+        this->declare_parameter("min_distance", 0.2);
+        this->declare_parameter("trans_thresh", 3.0);
+        this->declare_parameter("rot_thresh", 0.5);
+
         // Set up ROS subscribers and publishers
-        pointcloud_sub_ = nh_.subscribe("/velodyne_points", 10, &MapMakerNode::pointcloudCallback, this); //use when connected to Velodyne VLP-16
-        // pointcloud_sub_ = nh_.subscribe("/os1_cloud_node/points", 10, &MapMakerNode::pointcloudCallback, this); //use when connected to Ouster OS1 sensor
-        // pointcloud_sub_ = nh_.subscribe("/raw_point_cloud", 10, &MapMakerNode::pointcloudCallback, this); //use with fake_lidar node
-        aligned_pointcloud_pub_ = nh_.advertise<sensor_msgs::PointCloud2>("/hd_map", 1);
-        snail_trail_pub_ = nh_.advertise<sensor_msgs::PointCloud2>("/snail_trail_topic", 1);
+        pointcloud_sub_ = this->create_subscription<sensor_msgs::msg::PointCloud2>(
+            "/velodyne_points", 10,
+            std::bind(&MapMakerNode::pointcloudCallback, this, std::placeholders::_1));
+
+        aligned_pointcloud_pub_ = this->create_publisher<sensor_msgs::msg::PointCloud2>("/hd_map", 1);
+        snail_trail_pub_ = this->create_publisher<sensor_msgs::msg::PointCloud2>("/snail_trail_topic", 1);
+
+        broadcaster_ = std::make_unique<tf2_ros::TransformBroadcaster>(*this);
 
         X0.resize(6);
         X0 << 0., 0., 0., 0., 0., 0.; 
@@ -74,28 +89,37 @@ public:
         snailTrail.row(0) << 0., 0., 0.;
     }
 
-    void pointcloudCallback(const sensor_msgs::PointCloud2ConstPtr& msg) {
+    void pointcloudCallback(const sensor_msgs::msg::PointCloud2::SharedPtr msg) {
         auto before = std::chrono::system_clock::now();
         auto beforeMs = std::chrono::time_point_cast<std::chrono::milliseconds>(before);
         frameCount++;
 
         // Convert PointCloud2 to PCL PointCloud
-        boost::shared_ptr<pcl::PointCloud<pcl::PointXYZ>> pcl_cloud(new pcl::PointCloud<pcl::PointXYZ>());
+        pcl::PointCloud<pcl::PointXYZ>::Ptr pcl_cloud(new pcl::PointCloud<pcl::PointXYZ>());
         pcl::fromROSMsg(*msg, *pcl_cloud);
 
         if (!initialized_) {
             // On the first callback, initialize prev_pcl_cloud_
             prev_pcl_cloud_ = pcl_cloud;
             initialized_ = true;
-            prev_pcl_matrix = convertPCLtoEigen(prev_pcl_cloud_); //test
+            prev_pcl_matrix = convertPCLtoEigen(prev_pcl_cloud_);
             return;
         }
 
         // Convert PCL PointCloud to Eigen::MatrixXf
         Eigen::MatrixXf pcl_matrix = convertPCLtoEigen(pcl_cloud);
 
-        // Filter out points less than distance 'd' from the origin
-        float minD = 0.2;
+        // Read parameters
+        float minD = this->get_parameter("min_distance").as_double();
+        int numBinsPhi = this->get_parameter("num_bins_phi").as_int();
+        int numBinsTheta = this->get_parameter("num_bins_theta").as_int();
+        int run_length = this->get_parameter("run_length").as_int();
+        int min_points = this->get_parameter("min_points").as_int();
+        float cluster_thresh = this->get_parameter("cluster_thresh").as_double();
+        float cluster_buff = this->get_parameter("cluster_buff").as_double();
+        float trans_thresh = this->get_parameter("trans_thresh").as_double();
+        float rot_thresh = this->get_parameter("rot_thresh").as_double();
+
         vector<int> not_too_close_idxs;
         for (int i = 0; i < pcl_matrix.rows(); i++){
             float distance = pcl_matrix.row(i).norm();
@@ -109,20 +133,12 @@ public:
         }
         pcl_matrix = filtered_pcl_matrix;
 
-        // RUN UPDATED ICET CODE~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        int run_length = 12;
-        int numBinsPhi = 24;
-        int numBinsTheta = 75; 
-        int n = 25; //min points per voxel
-        float thresh = 0.1;  // Jump threshold for beginning and ending radial clusters
-        float buff = 0.1;    //buffer to add to inner and outer cluster range (helps attract nearby distributions)
-        ICET it(prev_pcl_matrix, pcl_matrix, run_length, X0, numBinsPhi, numBinsTheta, n, thresh, buff);
+        // RUN ICET ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        ICET it(prev_pcl_matrix, pcl_matrix, run_length, X0, numBinsPhi, numBinsTheta, min_points, cluster_thresh, cluster_buff);
         Eigen::VectorXf X = it.X;
         cout << "soln: " << endl << X << endl;
         cout << "1-sigma error bounds:" << endl << it.pred_stds << endl;
-        //seed initial estimate for next iteration
         X0 << 0., 0., 0., 0., 0., 0.; 
-        // X0 << X[0], X[1], X[2], X[3], X[4], X[5]; 
         //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
         //look for jumps in acceleration to prevent solution from exploding
@@ -137,24 +153,18 @@ public:
         }
 
         // Convert back to ROS PointCloud2 and publish the aligned point cloud
-        sensor_msgs::PointCloud2 aligned_cloud_msg;
         MatrixXf rot_mat = utils::R(X[3], X[4], X[5]);
         Eigen::RowVector3f trans(X[0], X[1], X[2]);
-        // MatrixXf rot_mat = utils::R(-X[3], -X[4], -X[5]); //test
-        // Eigen::RowVector3f trans(-X[0], -X[1], -X[2]); //test
-
-        //pass pcl_matrix directly to map queue
-        // q.add_new_scan(pcl_matrix, trans, rot_mat);
 
         //downsample pcl_matrix before passing to map queue
-        int downsampleSize = 2'000; //10'000
+        int downsampleSize = 2'000;
         std::size_t originalSize = pcl_matrix.rows();
         std::vector<std::size_t> indices(originalSize);
         std::iota(indices.begin(), indices.end(), 0);
         std::shuffle(indices.begin(), indices.end(), gen);
         //account for situations where sensor is occluded and numpts << downsampleSize
         Eigen::MatrixXf downsampledMatrix(std::min(downsampleSize, static_cast<int>(pcl_matrix.size()) / 3), pcl_matrix.cols());
-        for (std::size_t i = 0; i < downsampleSize; ++i) {
+        for (std::size_t i = 0; i < static_cast<std::size_t>(downsampleSize); ++i) {
             downsampledMatrix.row(i) = pcl_matrix.row(indices[i]);
         }
         q.add_new_scan(downsampledMatrix, trans, rot_mat);
@@ -173,25 +183,17 @@ public:
         std::cout << "X: \n" << X_homo <<endl;
 
         // Create a geometry_msgs::TransformStamped message
-        geometry_msgs::TransformStamped transformStamped;
+        geometry_msgs::msg::TransformStamped transformStamped;
 
         // Set the frame IDs
         transformStamped.header.frame_id = "map";         // Parent frame 
         transformStamped.child_frame_id = "velodyne";     // Child frame
-        // transformStamped.child_frame_id = "/os1_lidar";     // Child frame
-        // transformStamped.child_frame_id = "sensor";     // Child frame
 
         // Convert Eigen rotation matrix to quaternion
-        // Eigen::Matrix3f rotationMatrix = rot_mat.topLeftCorner(3, 3); //X_i
-        Eigen::Matrix3f rotationMatrix = X_homo.topLeftCorner(3, 3); //X
+        Eigen::Matrix3f rotationMatrix = X_homo.topLeftCorner(3, 3);
         Eigen::Quaternionf quaternion(rotationMatrix);
 
         // Set the translation and rotation in the transform message
-        //X_i
-        // transformStamped.transform.translation.x = trans(0);
-        // transformStamped.transform.translation.y = trans(1);
-        // transformStamped.transform.translation.z = trans(2);
-        // X
         transformStamped.transform.translation.x = X_homo(0,3);
         transformStamped.transform.translation.y = X_homo(1,3);
         transformStamped.transform.translation.z = X_homo(2,3);
@@ -201,22 +203,19 @@ public:
         transformStamped.transform.rotation.w = quaternion.w();
 
         // Set the timestamp
-        // std::cout << msg->header.stamp << endl;
-        // transformStamped.header.stamp = msg->header.stamp;  // Use lidar scan timestamp --> issues with using old rosbag data
-        transformStamped.header.stamp = ros::Time::now(); //use PC timestamp 
+        rclcpp::Time current_time = this->now();
+        transformStamped.header.stamp = current_time;
 
         // Broadcast the transform
-        broadcaster_.sendTransform(transformStamped);
+        broadcaster_->sendTransform(transformStamped);
 
         //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         // Create a header for the ROS message
-        std_msgs::Header header; 
-        header.stamp = ros::Time::now(); //use current timestamp 
-        // header.stamp = msg->header.stamp; //use lidar scan timestamp --> issues with using rosbag data?
-        header.frame_id = "map";  // Set frame ID
-        // sensor_msgs::PointCloud2 rosPointCloud = convertEigenToROS(prev_pcl_matrix, header);
-        sensor_msgs::PointCloud2 rosPointCloud = convertEigenToROS(mapPC, header);
-        aligned_pointcloud_pub_.publish(rosPointCloud);
+        std_msgs::msg::Header header; 
+        header.stamp = this->now();
+        header.frame_id = "map";
+        sensor_msgs::msg::PointCloud2 rosPointCloud = convertEigenToROS(mapPC, header);
+        aligned_pointcloud_pub_->publish(rosPointCloud);
 
         //update snail trail
         snailTrail = (snailTrail * rot_mat.inverse()).rowwise() - trans;
@@ -226,8 +225,8 @@ public:
         snailTrail.conservativeResize(currentRows + 1, Eigen::NoChange);
         snailTrail.row(currentRows) = new_row;
 
-        sensor_msgs::PointCloud2 snailPC = convertEigenToROS(snailTrail, header);
-        snail_trail_pub_.publish(snailPC);
+        sensor_msgs::msg::PointCloud2 snailPC = convertEigenToROS(snailTrail, header);
+        snail_trail_pub_->publish(snailPC);
 
         auto after1 = std::chrono::system_clock::now();
         auto after1Ms = std::chrono::time_point_cast<std::chrono::milliseconds>(after1);
@@ -238,23 +237,19 @@ public:
     Eigen::VectorXf X0;
 
 private:
-    float rot_thresh = 0.3; // denote registration as diverged if we rotate more than this amount between subsequent frames
-    float trans_thresh = 0.3; // or translate this amount between frames
 
-    ros::NodeHandle nh_;
-    ros::Subscriber pointcloud_sub_;
-    ros::Publisher snail_trail_pub_;
-    ros::Publisher aligned_pointcloud_pub_;
+    rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr pointcloud_sub_;
+    rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr snail_trail_pub_;
+    rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr aligned_pointcloud_pub_;
+    std::unique_ptr<tf2_ros::TransformBroadcaster> broadcaster_;
     pcl::PointCloud<pcl::PointXYZ>::Ptr prev_pcl_cloud_;
-    tf2_ros::Buffer tfBuffer_;
-    tf2_ros::TransformBroadcaster broadcaster_;
     bool initialized_;
     int frameCount = 0;
     Eigen::MatrixXf snailTrail;
     Eigen::MatrixXf prev_pcl_matrix;
     Eigen::MatrixXf mapPC;
     EigenQueue q;
-    std::random_device rd; //init for RNG
+    std::random_device rd;
     std::mt19937 gen;      
 
     //init variable to hold cumulative homogenous transform
@@ -268,7 +263,7 @@ private:
         return eigen_matrix;
     }
 
-    sensor_msgs::PointCloud2 convertEigenToROS(const Eigen::MatrixXf& eigenPointCloud, const std_msgs::Header& header) {
+    sensor_msgs::msg::PointCloud2 convertEigenToROS(const Eigen::MatrixXf& eigenPointCloud, const std_msgs::msg::Header& header) {
     pcl::PointCloud<pcl::PointXYZ> pclPointCloud;
         // Assuming each row of the Eigen matrix represents a point (x, y, z)
         for (int i = 0; i < eigenPointCloud.rows(); ++i) {
@@ -280,7 +275,7 @@ private:
         }
 
         // Convert PCL point cloud to ROS message
-        sensor_msgs::PointCloud2 rosPointCloud;
+        sensor_msgs::msg::PointCloud2 rosPointCloud;
         pcl::toROSMsg(pclPointCloud, rosPointCloud);
         rosPointCloud.header = header;  // Set the header from the input
 
@@ -289,8 +284,8 @@ private:
 };
 
 int main(int argc, char** argv) {
-    ros::init(argc, argv, "simple_map_maker_node");
-    MapMakerNode simple_map_maker_node;
-    ros::spin();
+    rclcpp::init(argc, argv);
+    rclcpp::spin(std::make_shared<MapMakerNode>());
+    rclcpp::shutdown();
     return 0;
 }
